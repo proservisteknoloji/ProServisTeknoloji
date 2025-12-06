@@ -1,0 +1,51 @@
+# PyQt6 GUI Framework
+PyQt6>=6.6.0
+PyQt6-Charts>=6.6.0
+
+# PDF Generation
+reportlab>=4.0.0
+
+# PDF Rendering / Direct Print
+PyMuPDF>=1.24.0
+
+# HTTP Requests
+requests>=2.31.0
+
+# Password Hashing
+bcrypt>=4.1.0
+
+# Image Processing
+Pillow>=10.0.0
+
+# XML/HTML Parsing
+lxml>=4.9.0
+beautifulsoup4>=4.12.0
+
+# System Information
+psutil>=5.9.0
+py-cpuinfo>=9.0.0
+wmi>=1.5.1
+pywin32>=306
+
+# Data Processing & Excel
+pandas>=2.1.0
+openpyxl>=3.1.0
+
+# Database (Azure SQL)
+pyodbc>=5.0.0
+
+# Encryption
+cryptography>=41.0.0
+
+# Testing
+pytest>=7.4.0
+
+# Environment Variables
+python-dotenv>=1.0.0
+
+# AI Libraries (Optional)
+openai>=1.0.0
+google-generativeai>=0.3.0
+
+# PDF Manipulation (Optional)
+PyPDF2>=3.0.0

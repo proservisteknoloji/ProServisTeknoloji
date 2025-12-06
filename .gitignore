@@ -1,0 +1,170 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Build
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# PyInstaller
+*.manifest
+temp_build/
+# Keep ProServis.spec
+!ProServis.spec
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+
+# Virtual Environment
+.venv/
+venv/
+ENV/
+env/
+env.bak/
+venv.bak/
+
+# Credentials - Güvenlik için git'e ekleme
+credentials/mail_creds.json
+credentials/*.json
+!credentials/.gitkeep
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ProServis Specific
+credentials/
+data/
+*.db
+*.log
+proservis.log
+sync_queue.db
+*.enc
+
+# Backup files
+*.backup
+*.bak
+*.old
+*_backup.py
+*.memory_backup
+*.sql_backup
+*.critical_backup
+backups/
+
+# Test files
+test_*.py
+quick_*.py
+diagnose_*.py
+analyze_*.py
+create_*.py
+verify_*.py
+fix_*.py
+setup_*.py
+clear_*.py
+force_*.py
+measure_*.py
+add_*.py
+smtp_test.py
+simulate_setup.py
+check_config.py
+reset_*.py
+update_status_names.py
+
+# Build files
+*.exe
+*.msi
+installer_output/
+ProServis_v2.0_Distribution/
+sfx_output/
+
+# Batch/Script files (except start.bat)
+*.bat
+!start.bat
+*.ps1
+
+# OS Files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+temp/
+tmp/
+*.tmp
+*.temp
+~$*
+
+# Configuration files with sensitive data
+config.json
+settings.json
+app_config.json
+.env
+
+# Service forms
+service_forms/
+
+# Documentation (old)
+*_README.md
+*_SETUP.md
+*_INTEGRATION.md
+*_TROUBLESHOOTING.md
+IMPLEMENTATION_SUMMARY.md
+README.old.md
+CLEANUP_REPORT.md
+
+# Images (keep only necessary ones)
+*.png
+*.jpg
+*.jpeg
+*.gif
+!ProServis.ico
+!kopier_logo.png
+!kyocera logo.png
+
+# PDF test files
+service_report_*_test*.pdf
