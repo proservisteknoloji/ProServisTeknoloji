@@ -40,10 +40,13 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 try:
     from openai import OpenAI, OpenAIError
     OPENAI_AVAILABLE = True
-except ImportError:
+except Exception as e:
+    # ImportError dışında (ör. pydantic uyumsuzluğu) hataları da yakala
     OPENAI_AVAILABLE = False
     OpenAI = None
     OpenAIError = None
+    if logging.getLogger().isEnabledFor(logging.DEBUG):
+        logging.debug(f"OpenAI kütüphanesi yüklenemedi: {e}")
 
 # Gemini için lazy import - Python 3.13 uyumsuzluğu nedeniyle
 GEMINI_AVAILABLE = False

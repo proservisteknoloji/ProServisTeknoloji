@@ -473,6 +473,24 @@ class BillingQueriesMixin:
                 invoice_dict['items'] = service_data.get('quote_items', [])
                 invoice_dict['main_info'] = service_data.get('main_info', {})
 
+        elif invoice_dict['invoice_type'] == 'Bakım Sözleşmesi':
+            # Bakım sözleşmesi faturası için invoice_items tablosundan kalemleri al
+            invoice_items = self.fetch_all(
+                "SELECT description, quantity, unit_price, currency FROM invoice_items WHERE invoice_id = ?",
+                (invoice_id,)
+            )
+            if invoice_items:
+                items_list = []
+                for item in invoice_items:
+                    items_list.append({
+                        'description': item['description'],
+                        'quantity': item['quantity'],
+                        'unit_price': item['unit_price'],
+                        'total': item['quantity'] * item['unit_price'],
+                        'currency': item['currency']
+                    })
+                invoice_dict['items'] = items_list
+
         elif invoice_dict['invoice_type'] == 'Kopya Başı':
             print(f"DEBUG: CPC faturası işleniyor, ID: {invoice_dict['related_id']}")
             cpc_details = self.fetch_one("SELECT * FROM cpc_invoices WHERE id = ?", (invoice_dict['related_id'],))

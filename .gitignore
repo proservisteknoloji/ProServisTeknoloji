@@ -65,9 +65,15 @@ credentials/*.json
 # IDE
 .vscode/
 .idea/
+.vs/
 *.swp
 *.swo
 *~
+*.code-workspace
+
+# Local/Generated data
+database/
+0
 
 # ProServis Specific
 credentials/

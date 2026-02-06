@@ -387,11 +387,13 @@ def _create_items_table(items: List[Dict[str, Any]], vat_rate: Decimal, currency
         item_currency = item.get('currency', currency)
         price_tl = Decimal(str(item.get('unit_price_tl', price)))
         total_tl = Decimal(str(item.get('total_tl', qty * price_tl)))
-        # Açıklama: sadece orijinal birim fiyat ve TL karşılığı (döviz kuru ile çarpılmış gerçek değer)
-        if item_currency != 'TL' and price_tl != price:
-            desc = f"{desc} ({price:,.3f} {item_currency} ≈ {price_tl:,.4f} TL)"
-        else:
-            desc = f"{desc} ({price_tl:,.4f} TL)"
+        # Açıklama: sayfa sadece orijinal birim fiyat ve TL karşılığı (döviz kuru ile çarpılmış gerçek değer)
+        # Bakım Sözleşmesi items'ı için (description'da "Bedeli" varsa) TL ekleme yapma
+        if "Bedeli" not in desc:
+            if item_currency != 'TL' and price_tl != price:
+                desc = f"{desc} ({price:,.3f} {item_currency} ≈ {price_tl:,.4f} TL)"
+            else:
+                desc = f"{desc} ({price_tl:,.4f} TL)"
         print(f"DEBUG: PDF item {i}: description='{desc}', quantity={qty}, unit_price={price_tl}, currency=TL")
         # Tabloda gösterilecek değerler: show original currency and TL equivalent when applicable
         if item_currency != 'TL' and price != price_tl:

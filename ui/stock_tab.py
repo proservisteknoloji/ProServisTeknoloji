@@ -50,6 +50,10 @@ class StockTab(QWidget):
         # Emanet stok sekmesi
         emanet_stock_tab = self._create_emanet_stock_tab()
         self.tab_widget.addTab(emanet_stock_tab, "📥 Emanet Stok")
+
+        # 2. El cihaz stok sekmesi
+        second_hand_stock_tab = self._create_second_hand_stock_tab()
+        self.tab_widget.addTab(second_hand_stock_tab, "🔄 2. El Cihaz")
         
         main_layout.addWidget(self.tab_widget)
         
@@ -99,17 +103,14 @@ class StockTab(QWidget):
         self.emanet_table.setRowCount(0)
         # Cihaz ve servis kaydı ile birlikte arıza ve beklenen parça bilgisini çek
         query = '''
-            SELECT s.id, s.name, cd.serial_number, s.quantity,
+            SELECT s.id, s.name, s.part_number as serial_number, s.quantity,
                    sr.problem_description, sr.notes,
                    (SELECT GROUP_CONCAT(description, ', ') FROM quote_items WHERE service_record_id = sr.id AND unit_price IS NULL) as waiting_parts
             FROM stock_items s
-            LEFT JOIN customer_devices cd ON cd.serial_number = s.part_number
-            LEFT JOIN service_records sr ON sr.id = (
-                SELECT id FROM service_records
-                WHERE device_id = cd.id AND status IN ('Servise alındı', 'Parça bekleniyor', 'İşleme alındı')
-                ORDER BY created_date DESC, id DESC LIMIT 1
-            )
-            WHERE s.item_type = 'Cihaz' AND s.is_consignment = 1
+            LEFT JOIN service_records sr ON sr.device_id = (
+                SELECT cd.id FROM customer_devices cd WHERE cd.serial_number = s.part_number LIMIT 1
+            ) AND sr.status IN ('Servise alındı', 'Parça bekleniyor', 'İşleme alındı')
+            WHERE s.item_type = 'Cihaz' AND s.is_consignment = 1 AND sr.id IS NOT NULL
             ORDER BY s.name
         '''
         emanet_items = self.db.fetch_all(query)
@@ -166,6 +167,103 @@ class StockTab(QWidget):
         dlg = QPrintDialog(printer, self)
         if dlg.exec():
             doc.print(printer)
+
+    def _create_second_hand_stock_tab(self):
+        """2. El cihaz stok sekmesini oluşturur."""
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+        
+        # Arama alanı
+        filter_layout = QHBoxLayout()
+        self.second_hand_filter_input = QLineEdit()
+        self.second_hand_filter_input.setPlaceholderText("Model, seri no veya alınan kişi/kurum ile ara...")
+        filter_layout.addWidget(self.second_hand_filter_input)
+        layout.addLayout(filter_layout)
+
+        # Buton alanı
+        btn_layout = QHBoxLayout()
+        self.add_second_hand_btn = QPushButton("➕ 2. El Cihaz Ekle")
+        self.scrap_device_btn = QPushButton("🗑️ Hurda Çıkar")
+        self.print_second_hand_btn = QPushButton("🖨️ 2. El Listesi Yazdır")
+        
+        # Buton stilleri
+        for btn in [self.add_second_hand_btn, self.scrap_device_btn, self.print_second_hand_btn]:
+            btn.setStyleSheet("""
+                QPushButton {
+                    background-color: #2196F3;
+                    color: white;
+                    font-weight: bold;
+                    border-radius: 6px;
+                    padding: 8px 16px;
+                }
+                QPushButton:hover {
+                    background-color: #1976D2;
+                }
+            """)
+        
+        self.scrap_device_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #F44336;
+                color: white;
+                font-weight: bold;
+                border-radius: 6px;
+                padding: 8px 16px;
+            }
+            QPushButton:hover {
+                background-color: #D32F2F;
+            }
+        """)
+        
+        self.scrap_device_btn.setEnabled(False)
+        
+        btn_layout.addWidget(self.add_second_hand_btn)
+        btn_layout.addWidget(self.scrap_device_btn)
+        btn_layout.addStretch()
+        btn_layout.addWidget(self.print_second_hand_btn)
+        layout.addLayout(btn_layout)
+        
+        # 2. El cihaz tablosu
+        self.second_hand_table = QTableWidget(0, 10)
+        self.second_hand_table.setHorizontalHeaderLabels([
+            "ID", "Cihaz Model", "Seri No", "Alınan Kişi/Kurum", 
+            "Alınma Tarihi", "Alış Fiyatı", "Satış Fiyatı", "Durum", "Kâr Marjı", "Notlar"
+        ])
+        self.second_hand_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        self.second_hand_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self.second_hand_table.hideColumn(0)
+        
+        # Sütun genişlikleri
+        header = self.second_hand_table.horizontalHeader()
+        if header:
+            header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)  # Cihaz Model - esnek
+            header.setSectionResizeMode(2, QHeaderView.ResizeMode.Fixed)   # Seri No - sabit
+            header.setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)  # Alınan Kişi - esnek
+            header.setSectionResizeMode(4, QHeaderView.ResizeMode.Fixed)   # Tarih - sabit
+            header.setSectionResizeMode(5, QHeaderView.ResizeMode.Fixed)   # Alış Fiyatı - sabit
+            header.setSectionResizeMode(6, QHeaderView.ResizeMode.Fixed)   # Satış Fiyatı - sabit
+            header.setSectionResizeMode(7, QHeaderView.ResizeMode.Fixed)   # Durum - sabit
+            header.setSectionResizeMode(8, QHeaderView.ResizeMode.Fixed)   # Kâr Marjı - sabit
+            header.setSectionResizeMode(9, QHeaderView.ResizeMode.Stretch)  # Notlar - esnek
+            
+            self.second_hand_table.setColumnWidth(2, 120)  # Seri No
+            self.second_hand_table.setColumnWidth(4, 100)  # Tarih
+            self.second_hand_table.setColumnWidth(5, 80)   # Alış Fiyatı
+            self.second_hand_table.setColumnWidth(6, 80)   # Satış Fiyatı
+            self.second_hand_table.setColumnWidth(7, 80)   # Durum
+            self.second_hand_table.setColumnWidth(8, 70)   # Kâr Marjı
+        
+        layout.addWidget(self.second_hand_table)
+        
+        # Sinyalleri bağla
+        self.add_second_hand_btn.clicked.connect(self.add_second_hand_device)
+        self.scrap_device_btn.clicked.connect(self.scrap_second_hand_device)
+        self.print_second_hand_btn.clicked.connect(self.print_second_hand_list)
+        self.second_hand_table.itemSelectionChanged.connect(self.second_hand_device_selected)
+        self.second_hand_table.itemDoubleClicked.connect(self.edit_second_hand_device)
+        self.second_hand_filter_input.textChanged.connect(self.filter_second_hand_devices)
+        
+        self.refresh_second_hand_stock()
+        return tab
 
     def _create_normal_stock_tab(self):
         """Normal stok sekmesini oluşturur."""
@@ -698,6 +796,10 @@ class StockTab(QWidget):
         filter_text = self.filter_input.text()
         current_id = self.selected_item_id
         self.stock_table.setRowCount(0)
+        
+        # Emanet stokları da yenile
+        self.refresh_emanet_stock()
+        
         try:
             items = self.db.get_stock_items(filter_text)
             if not items:
@@ -1745,9 +1847,576 @@ class StockTab(QWidget):
             logging.info(f"Dialog'dan stok {movement_type.lower()}: {item_name} - {movement_data['quantity']} adet")
             
         except Exception as e:
-            logging.error(f"Dialog stok giriş hatası: {e}")
-            QMessageBox.critical(
-                self, 
-                "Stok Giriş Hatası", 
-                f"Stok giriş işlemi başarısız:\n{str(e)}"
+            log_error("StockTab", e)
+            QMessageBox.critical(self, "Hata", f"Stok işlemi başarısız: {e}")
+
+    # === 2. El Cihaz Fonksiyonları ===
+
+    def refresh_second_hand_stock(self):
+        """2. El cihaz stok listesini yeniler."""
+        self.second_hand_table.setRowCount(0)
+        
+        query = '''
+            SELECT id, device_model, serial_number, source_person, 
+                   acquisition_date, purchase_price, COALESCE(sale_price, 0) as sale_price, status, notes
+            FROM second_hand_devices 
+            ORDER BY acquisition_date DESC
+        '''
+        
+        try:
+            devices = self.db.fetch_all(query)
+            for row_idx, device in enumerate(devices):
+                self.second_hand_table.insertRow(row_idx)
+                self.second_hand_table.setItem(row_idx, 0, QTableWidgetItem(str(device['id'])))
+                self.second_hand_table.setItem(row_idx, 1, QTableWidgetItem(device['device_model'] or ''))
+                self.second_hand_table.setItem(row_idx, 2, QTableWidgetItem(device['serial_number'] or ''))
+                self.second_hand_table.setItem(row_idx, 3, QTableWidgetItem(device['source_person'] or ''))
+                self.second_hand_table.setItem(row_idx, 4, QTableWidgetItem(device['acquisition_date'] or ''))
+                self.second_hand_table.setItem(row_idx, 5, QTableWidgetItem(str(device['purchase_price'] or 0)))
+                
+                # Satış fiyatı ve kâr marjı hesapla
+                purchase_price = float(device['purchase_price'] or 0)
+                sale_price = float(device['sale_price'] or (purchase_price * 1.3))  # Varsayılan %30 kâr
+                profit_margin = sale_price - purchase_price
+                
+                self.second_hand_table.setItem(row_idx, 6, QTableWidgetItem(f"{sale_price:.2f}"))
+                self.second_hand_table.setItem(row_idx, 7, QTableWidgetItem(device['status'] or 'Stokta'))
+                self.second_hand_table.setItem(row_idx, 8, QTableWidgetItem(f"{profit_margin:.2f}"))
+                self.second_hand_table.setItem(row_idx, 9, QTableWidgetItem(device['notes'] or ''))
+                
+                # Kâr marjı rengini ayarla
+                profit_item = self.second_hand_table.item(row_idx, 8)
+                if profit_item and profit_margin > 0:
+                    profit_item.setForeground(Qt.GlobalColor.darkGreen)
+                elif profit_item and profit_margin < 0:
+                    profit_item.setForeground(Qt.GlobalColor.red)
+                    
+        except Exception as e:
+            log_error("StockTab", e)
+            QMessageBox.critical(self, "Hata", f"2. El cihaz listesi yüklenemedi: {e}")
+
+        # Liste yenilendikten sonra filtre uygula
+        self.filter_second_hand_devices()
+
+    def filter_second_hand_devices(self):
+        """2. El cihaz listesini arama kutusuna göre filtreler."""
+        if not hasattr(self, 'second_hand_filter_input'):
+            return
+        filter_text = self.second_hand_filter_input.text().strip().lower()
+        for row in range(self.second_hand_table.rowCount()):
+            model_item = self.second_hand_table.item(row, 1)
+            serial_item = self.second_hand_table.item(row, 2)
+            source_item = self.second_hand_table.item(row, 3)
+            haystack = " ".join([
+                model_item.text() if model_item else "",
+                serial_item.text() if serial_item else "",
+                source_item.text() if source_item else ""
+            ]).lower()
+            self.second_hand_table.setRowHidden(row, filter_text not in haystack)
+
+    def add_second_hand_device(self):
+        """Yeni 2. El cihaz ekler."""
+        try:
+            from PyQt6.QtWidgets import (
+                QDialog, QFormLayout, QLineEdit, QComboBox, QPushButton, QDialogButtonBox,
+                QCheckBox, QListWidget, QListWidgetItem, QHBoxLayout, QLabel, QWidget, QVBoxLayout
             )
+            
+            dialog = QDialog(self)
+            dialog.setWindowTitle("2. El Cihaz Ekle")
+            dialog.setMinimumWidth(400)
+            layout = QFormLayout(dialog)
+            
+            # Form alanları
+            model_input = QLineEdit()
+            serial_input = QLineEdit()
+            source_input = QLineEdit()
+            date_input = QLineEdit()
+            date_input.setPlaceholderText("YYYY-MM-DD")
+            price_input = QLineEdit()
+            sale_price_input = QLineEdit()
+            notes_input = QLineEdit()
+            reason_input = QLineEdit()
+            status_combo = QComboBox()
+            status_combo.addItems(['Stokta', 'Serviste', 'Satıldı'])
+            
+            # Varsayılan değerler
+            from datetime import datetime
+            date_input.setText(datetime.now().strftime("%Y-%m-%d"))
+            
+            # Müşteri cihazı seçimi alanı
+            use_customer_device_chk = QCheckBox("Müşteri cihazından seç")
+            customer_device_filter = QLineEdit()
+            customer_device_filter.setPlaceholderText("Müşteri adı, model veya seri no ile ara...")
+            customer_device_list = QListWidget()
+            customer_device_list.setFixedHeight(120)
+            clear_selection_btn = QPushButton("Seçimi Temizle")
+
+            customer_device_container = QWidget()
+            customer_device_layout = QVBoxLayout(customer_device_container)
+            customer_device_layout.setContentsMargins(0, 0, 0, 0)
+            customer_device_layout.addWidget(use_customer_device_chk)
+            customer_device_layout.addWidget(customer_device_filter)
+            customer_device_layout.addWidget(customer_device_list)
+            customer_device_layout.addWidget(clear_selection_btn)
+
+            # Müşteri cihazlarını yükle
+            all_customer_devices = self.db.fetch_all("""
+                SELECT cd.id as device_id, c.id as customer_id, c.name as customer_name,
+                       cd.device_model, cd.serial_number
+                FROM customer_devices cd
+                JOIN customers c ON c.id = cd.customer_id
+                ORDER BY c.name, cd.device_model
+            """)
+
+            selected_customer_device = {'device_id': None, 'customer_id': None, 'customer_name': '', 'device_model': '', 'serial_number': ''}
+
+            def populate_customer_devices(filter_text: str = ""):
+                customer_device_list.clear()
+                if not all_customer_devices:
+                    return
+                ft = (filter_text or "").strip().lower()
+                for row in all_customer_devices:
+                    customer_name = row['customer_name'] or ''
+                    device_model = row['device_model'] or ''
+                    serial_number = row['serial_number'] or ''
+                    haystack = f"{customer_name} {device_model} {serial_number}".lower()
+                    if ft and ft not in haystack:
+                        continue
+                    display = f"{customer_name} | {device_model} | {serial_number}"
+                    item = QListWidgetItem(display)
+                    item.setData(Qt.ItemDataRole.UserRole, {
+                        'device_id': row['device_id'],
+                        'customer_id': row['customer_id'],
+                        'customer_name': customer_name,
+                        'device_model': device_model,
+                        'serial_number': serial_number
+                    })
+                    customer_device_list.addItem(item)
+
+            def set_customer_device_ui(enabled: bool):
+                customer_device_filter.setEnabled(enabled)
+                customer_device_list.setEnabled(enabled)
+                clear_selection_btn.setEnabled(enabled)
+                if not enabled:
+                    model_input.setReadOnly(False)
+                    serial_input.setReadOnly(False)
+                    customer_device_list.clearSelection()
+
+            def clear_customer_device_selection():
+                selected_customer_device.update({
+                    'device_id': None,
+                    'customer_id': None,
+                    'customer_name': '',
+                    'device_model': '',
+                    'serial_number': ''
+                })
+                customer_device_list.clearSelection()
+                model_input.setReadOnly(False)
+                serial_input.setReadOnly(False)
+
+            def handle_device_selection():
+                item = customer_device_list.currentItem()
+                if not item:
+                    return
+                data = item.data(Qt.ItemDataRole.UserRole) or {}
+                selected_customer_device.update({
+                    'device_id': data.get('device_id'),
+                    'customer_id': data.get('customer_id'),
+                    'customer_name': data.get('customer_name', ''),
+                    'device_model': data.get('device_model', ''),
+                    'serial_number': data.get('serial_number', '')
+                })
+                model_input.setText(selected_customer_device['device_model'])
+                serial_input.setText(selected_customer_device['serial_number'])
+                source_input.setText(selected_customer_device['customer_name'])
+                model_input.setReadOnly(True)
+                serial_input.setReadOnly(True)
+
+            use_customer_device_chk.toggled.connect(set_customer_device_ui)
+            customer_device_filter.textChanged.connect(populate_customer_devices)
+            customer_device_list.itemSelectionChanged.connect(handle_device_selection)
+            clear_selection_btn.clicked.connect(clear_customer_device_selection)
+            set_customer_device_ui(False)
+            populate_customer_devices()
+
+            layout.addRow("Cihaz Model:", model_input)
+            layout.addRow("Seri No:", serial_input)
+            layout.addRow("Alınan Kişi/Kurum:", source_input)
+            layout.addRow("Alınma Tarihi:", date_input)
+            layout.addRow("Alış Fiyatı:", price_input)
+            layout.addRow("Satış Fiyatı:", sale_price_input)
+            layout.addRow("Durum:", status_combo)
+            layout.addRow("Alım Nedeni:", reason_input)
+            layout.addRow("Notlar:", notes_input)
+            layout.addRow("Müşteri Cihazı:", customer_device_container)
+            
+            # Butonlar
+            buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+            buttons.accepted.connect(dialog.accept)
+            buttons.rejected.connect(dialog.reject)
+            layout.addRow(buttons)
+            
+            if dialog.exec() == QDialog.DialogCode.Accepted:
+                # Verileri kaydet
+                reason_text = reason_input.text().strip()
+                notes_text = notes_input.text().strip()
+                if reason_text:
+                    notes_text = f"{notes_text} | Alım nedeni: {reason_text}" if notes_text else f"Alım nedeni: {reason_text}"
+                
+                data = {
+                    'device_model': model_input.text().strip(),
+                    'serial_number': serial_input.text().strip(),
+                    'source_person': source_input.text().strip(),
+                    'acquisition_date': date_input.text().strip(),
+                    'purchase_price': float(price_input.text() or 0),
+                    'sale_price': float(sale_price_input.text() or 0),
+                    'status': status_combo.currentText(),
+                    'notes': notes_text
+                }
+
+                # Müşteri cihazından seçildiyse cihaz bilgilerini sabitle
+                if selected_customer_device.get('device_id'):
+                    data['device_model'] = selected_customer_device.get('device_model', data['device_model'])
+                    data['serial_number'] = selected_customer_device.get('serial_number', data['serial_number'])
+                    if selected_customer_device.get('customer_name'):
+                        data['source_person'] = selected_customer_device.get('customer_name')
+                
+                if not data['device_model']:
+                    QMessageBox.warning(self, "Uyarı", "Cihaz modeli boş olamaz!")
+                    return
+                
+                # Veritabanına ekle
+                query = '''
+                    INSERT INTO second_hand_devices 
+                    (device_model, serial_number, source_person, acquisition_date, purchase_price, sale_price, status, notes)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                '''
+                self.db.execute_query(query, (
+                    data['device_model'], data['serial_number'], data['source_person'],
+                    data['acquisition_date'], data['purchase_price'], data['sale_price'], 
+                    data['status'], data['notes']
+                ))
+
+                # Müşteri cihazından alındıysa müşteri cihazını boşa al (customer_id = NULL)
+                if selected_customer_device.get('device_id'):
+                    move_note = f"2. el depoya taşındı: {data['acquisition_date']}"
+                    self.db.execute_query(
+                        """
+                        UPDATE customer_devices
+                        SET customer_id = NULL, location_id = NULL,
+                            notes = CASE
+                                WHEN notes IS NULL OR notes = '' THEN ?
+                                ELSE notes || '\n' || ?
+                            END
+                        WHERE id = ?
+                        """,
+                        (move_note, move_note, selected_customer_device['device_id'])
+                    )
+                
+                # Normal stoka da ekle
+                self._add_second_hand_to_normal_stock(data)
+                
+                self.refresh_second_hand_stock()
+                self.refresh_data()
+                QMessageBox.information(self, "Başarılı", "2. El cihaz başarıyla eklendi!")
+                
+        except Exception as e:
+            log_error("StockTab", e)
+            QMessageBox.critical(self, "Hata", f"2. El cihaz eklenemedi: {e}")
+
+    def edit_second_hand_device(self, item):
+        """Seçili 2. El cihazı düzenleme dialogunu açar."""
+        selection_model = self.second_hand_table.selectionModel()
+        if not selection_model:
+            return
+        selected_rows = selection_model.selectedRows()
+        if not selected_rows:
+            return
+        row = selected_rows[0].row()
+        id_item = self.second_hand_table.item(row, 0)
+        if not id_item:
+            return
+        device_id = int(id_item.text())
+
+        try:
+            device = self.db.fetch_one(
+                """
+                SELECT id, device_model, serial_number, source_person, acquisition_date,
+                       purchase_price, sale_price, status, notes
+                FROM second_hand_devices
+                WHERE id = ?
+                """,
+                (device_id,)
+            )
+            if not device:
+                QMessageBox.warning(self, "Hata", "Cihaz bilgisi bulunamadı.")
+                return
+
+            old_model = device['device_model'] or ''
+            old_serial = device['serial_number'] or ''
+            old_status = device['status'] or 'Stokta'
+
+            from PyQt6.QtWidgets import QDialog, QFormLayout, QLineEdit, QComboBox, QDialogButtonBox
+
+            dialog = QDialog(self)
+            dialog.setWindowTitle("2. El Cihaz Düzenle")
+            dialog.setMinimumWidth(400)
+            layout = QFormLayout(dialog)
+
+            model_input = QLineEdit(device['device_model'] or "")
+            serial_input = QLineEdit(device['serial_number'] or "")
+            source_input = QLineEdit(device['source_person'] or "")
+            date_input = QLineEdit(device['acquisition_date'] or "")
+            date_input.setPlaceholderText("YYYY-MM-DD")
+            price_input = QLineEdit(str(device['purchase_price'] or 0))
+            sale_price_input = QLineEdit(str(device['sale_price'] or 0))
+            notes_input = QLineEdit(device['notes'] or "")
+            status_combo = QComboBox()
+            status_combo.addItems(['Stokta', 'Serviste', 'Satıldı', 'Hurda'])
+            status_combo.setCurrentText(device['status'] or 'Stokta')
+
+            layout.addRow("Cihaz Model:", model_input)
+            layout.addRow("Seri No:", serial_input)
+            layout.addRow("Alınan Kişi/Kurum:", source_input)
+            layout.addRow("Alınma Tarihi:", date_input)
+            layout.addRow("Alış Fiyatı:", price_input)
+            layout.addRow("Satış Fiyatı:", sale_price_input)
+            layout.addRow("Durum:", status_combo)
+            layout.addRow("Notlar:", notes_input)
+
+            buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+            buttons.accepted.connect(dialog.accept)
+            buttons.rejected.connect(dialog.reject)
+            layout.addRow(buttons)
+
+            if dialog.exec() != QDialog.DialogCode.Accepted:
+                return
+
+            data = {
+                'device_model': model_input.text().strip(),
+                'serial_number': serial_input.text().strip(),
+                'source_person': source_input.text().strip(),
+                'acquisition_date': date_input.text().strip(),
+                'purchase_price': float(price_input.text() or 0),
+                'sale_price': float(sale_price_input.text() or 0),
+                'status': status_combo.currentText(),
+                'notes': notes_input.text().strip()
+            }
+
+            if not data['device_model']:
+                QMessageBox.warning(self, "Uyarı", "Cihaz modeli boş olamaz!")
+                return
+
+            self.db.execute_query(
+                """
+                UPDATE second_hand_devices
+                SET device_model = ?, serial_number = ?, source_person = ?, acquisition_date = ?,
+                    purchase_price = ?, sale_price = ?, status = ?, notes = ?
+                WHERE id = ?
+                """,
+                (
+                    data['device_model'], data['serial_number'], data['source_person'],
+                    data['acquisition_date'], data['purchase_price'], data['sale_price'],
+                    data['status'], data['notes'], device_id
+                )
+            )
+
+            # Normal stok senkronizasyonu (Hurda olsa bile stokta kalsın)
+            stock_item = self.db.fetch_one(
+                "SELECT id FROM stock_items WHERE item_type = 'Cihaz' AND part_number = ?",
+                (old_serial,)
+            )
+            if stock_item:
+                self.db.execute_query(
+                    """
+                    UPDATE stock_items
+                    SET name = ?, part_number = ?, sale_price = ?, description = ?
+                    WHERE id = ?
+                    """,
+                    (
+                        data['device_model'],
+                        data['serial_number'],
+                        data['sale_price'],
+                        f"2. El cihaz - Alınan: {data['source_person']}",
+                        stock_item['id']
+                    )
+                )
+
+            self.refresh_second_hand_stock()
+            self.refresh_data()
+            QMessageBox.information(self, "Başarılı", "2. El cihaz güncellendi.")
+
+        except Exception as e:
+            log_error("StockTab", e)
+            QMessageBox.critical(self, "Hata", f"2. El cihaz güncellenemedi: {e}")
+
+    def _add_second_hand_to_normal_stock(self, device_data):
+        """2. El cihazı normal stoka ekler."""
+        try:
+            # Normal stokta var mı kontrol et
+            existing = self.db.fetch_one(
+                "SELECT id, quantity FROM stock_items WHERE name = ? AND item_type = 'Cihaz'",
+                (device_data['device_model'],)
+            )
+            
+            if existing:
+                # Varsa miktarını artır
+                new_quantity = existing['quantity'] + 1
+                self.db.execute_query(
+                    "UPDATE stock_items SET quantity = ? WHERE id = ?",
+                    (new_quantity, existing['id'])
+                )
+                
+                # Stok hareketi kaydet
+                self.db.add_stock_movement(
+                    existing['id'], 'Giriş', 1, 
+                    f"2. El cihaz eklendi - Seri No: {device_data['serial_number']}"
+                )
+            else:
+                # Yoksa yeni stok kaydı oluştur
+                stock_data = {
+                    'name': device_data['device_model'],
+                    'item_type': 'Cihaz',
+                    'part_number': device_data['serial_number'],
+                    'quantity': 1,
+                    'sale_price': device_data.get('sale_price') or (device_data['purchase_price'] * 1.2),  # Belirlenen satış fiyatı veya %20 kar marjı
+                    'description': f"2. El cihaz - Alınan: {device_data['source_person']}"
+                }
+                
+                new_id = self.db.execute_query('''
+                    INSERT INTO stock_items (name, item_type, part_number, quantity, sale_price, description)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                ''', (stock_data['name'], stock_data['item_type'], stock_data['part_number'],
+                      stock_data['quantity'], stock_data['sale_price'], stock_data['description']))
+                
+                # Stok hareketi kaydet
+                if new_id:
+                    self.db.add_stock_movement(
+                        new_id, 'Giriş', 1,
+                        f"2. El cihaz eklendi - Seri No: {device_data['serial_number']}"
+                    )
+                    
+        except Exception as e:
+            log_error("StockTab", e)
+
+    def second_hand_device_selected(self):
+        """2. El cihaz seçildiğinde hurda butonunu aktif eder."""
+        selection_model = self.second_hand_table.selectionModel()
+        if selection_model:
+            selected_rows = selection_model.selectedRows()
+            self.scrap_device_btn.setEnabled(len(selected_rows) > 0)
+        else:
+            self.scrap_device_btn.setEnabled(False)
+
+    def scrap_second_hand_device(self):
+        """Seçili 2. El cihazı hurdaya çıkarır."""
+        selection_model = self.second_hand_table.selectionModel()
+        if not selection_model:
+            return
+            
+        selected_rows = selection_model.selectedRows()
+        if not selected_rows:
+            return
+        
+        try:
+            row = selected_rows[0].row()
+            id_item = self.second_hand_table.item(row, 0)
+            model_item = self.second_hand_table.item(row, 1)
+            serial_item = self.second_hand_table.item(row, 2)
+            
+            if not id_item or not model_item or not serial_item:
+                QMessageBox.warning(self, "Hata", "Cihaz bilgileri eksik!")
+                return
+                
+            device_id = int(id_item.text())
+            device_model = model_item.text()
+            serial_number = serial_item.text()
+            
+            reply = QMessageBox.question(
+                self, "Hurda Çıkarma Onayı",
+                f"Bu cihazı hurdaya çıkarmak istediğinizden emin misiniz?\n\n"
+                f"Cihaz: {device_model}\n"
+                f"Seri No: {serial_number}\n\n"
+                f"Bu işlem geri alınamaz!",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+            )
+            
+            if reply == QMessageBox.StandardButton.Yes:
+                # 2. El cihazı güncelle
+                self.db.execute_query(
+                    "UPDATE second_hand_devices SET status = 'Hurda' WHERE id = ?",
+                    (device_id,)
+                )
+                
+                self.refresh_second_hand_stock()
+                self.refresh_data()
+                QMessageBox.information(self, "Başarılı", "Cihaz hurdaya çıkarıldı!")
+                
+        except Exception as e:
+            log_error("StockTab", e)
+            QMessageBox.critical(self, "Hata", f"Hurda çıkarma işlemi başarısız: {e}")
+
+    def _remove_second_hand_from_normal_stock(self, device_model, serial_number):
+        """2. El cihazı normal stoktan çıkarır."""
+        try:
+            # Stokta bul
+            stock_item = self.db.fetch_one(
+                "SELECT id, quantity FROM stock_items WHERE name = ? AND item_type = 'Cihaz'",
+                (device_model,)
+            )
+            
+            if stock_item and stock_item['quantity'] > 0:
+                new_quantity = stock_item['quantity'] - 1
+                
+                if new_quantity > 0:
+                    # Miktarı azalt
+                    self.db.execute_query(
+                        "UPDATE stock_items SET quantity = ? WHERE id = ?",
+                        (new_quantity, stock_item['id'])
+                    )
+                else:
+                    # Stoktan tamamen kaldır
+                    self.db.execute_query("DELETE FROM stock_items WHERE id = ?", (stock_item['id'],))
+                
+                # Stok hareketi kaydet
+                self.db.add_stock_movement(
+                    stock_item['id'], 'Çıkış', 1,
+                    f"2. El cihaz hurda çıkarıldı - Seri No: {serial_number}"
+                )
+                
+        except Exception as e:
+            log_error("StockTab", e)
+
+    def print_second_hand_list(self):
+        """2. El cihaz listesini yazdırır."""
+        from PyQt6.QtPrintSupport import QPrinter, QPrintDialog
+        from PyQt6.QtGui import QTextDocument
+        
+        html = "<h2>2. El Cihaz Listesi</h2><table border='1' cellspacing='0' cellpadding='4'><tr>"
+        headers = []
+        for i in range(self.second_hand_table.columnCount()):
+            if not self.second_hand_table.isColumnHidden(i):
+                header_item = self.second_hand_table.horizontalHeaderItem(i)
+                if header_item:
+                    headers.append(header_item.text())
+        
+        for h in headers:
+            html += f"<th>{h}</th>"
+        html += "</tr>"
+        
+        for row in range(self.second_hand_table.rowCount()):
+            html += "<tr>"
+            for col in range(self.second_hand_table.columnCount()):
+                if not self.second_hand_table.isColumnHidden(col):
+                    val = self.second_hand_table.item(row, col)
+                    html += f"<td>{val.text() if val else ''}</td>"
+            html += "</tr>"
+        html += "</table>"
+        
+        doc = QTextDocument()
+        doc.setHtml(html)
+        printer = QPrinter()
+        dlg = QPrintDialog(printer, self)
+        if dlg.exec():
+            doc.print(printer)

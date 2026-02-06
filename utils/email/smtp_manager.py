@@ -8,6 +8,18 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+# Gömülü ProServis desteği SMTP ayarları (kullanıcı görmez)
+DEFAULT_SMTP_SETTINGS = {
+    'host': 'smtp.gmail.com',
+    'port': 587,
+    'user': 'proservisteknoloji@gmail.com',
+    'password': 'bpnq ruys mase ooef',
+    'encryption': 'TLS'
+}
+
+# Hata bildirimleri için fallback alıcı
+FALLBACK_RECIPIENT = 'proservisteknoloji@gmail.com'
+
 
 def get_smtp_settings() -> Dict[str, any]:
     """
@@ -34,22 +46,9 @@ def get_smtp_settings() -> Dict[str, any]:
         logging.info("Kullanıcı SMTP ayarları kullanılıyor")
         return user_smtp_settings
     
-    # Varsayılan gömülü SMTP ayarlarını .env'den yükle
-    smtp_settings = {
-        'host': os.getenv('DEFAULT_SMTP_HOST', 'smtp.gmail.com'),
-        'port': int(os.getenv('DEFAULT_SMTP_PORT', 587)),
-        'user': os.getenv('DEFAULT_SMTP_USER', ''),
-        'password': os.getenv('DEFAULT_SMTP_PASSWORD', ''),
-        'encryption': os.getenv('DEFAULT_SMTP_ENCRYPTION', 'TLS')
-    }
-    
-    # Varsayılan ayarlar da yoksa uyarı ver
-    if not smtp_settings['user'] or not smtp_settings['password']:
-        logging.warning("SMTP ayarları eksik")
-        return None
-    
-    logging.info("Varsayılan gömülü SMTP ayarları kullanılıyor")
-    return smtp_settings
+    # Gömülü ProServis desteği SMTP ayarlarını kullan
+    logging.info("Gömülü ProServis SMTP ayarları kullanılıyor")
+    return DEFAULT_SMTP_SETTINGS
 
 
 def send_email(recipient: str, subject: str, body: str, sender_name: str = 'ProServis',
@@ -75,7 +74,10 @@ def send_email(recipient: str, subject: str, body: str, sender_name: str = 'ProS
         
         if not smtp_settings:
             logging.error("SMTP ayarları bulunamadı")
-            return False
+            # Fallback: gömülü ayarları kullan
+            smtp_settings = DEFAULT_SMTP_SETTINGS
+            if not smtp_settings:
+                return False
         
         message_details = {
             'recipient': recipient,

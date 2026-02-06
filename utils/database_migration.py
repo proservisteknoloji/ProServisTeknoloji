@@ -106,6 +106,36 @@ class DatabaseMigration:
                 else:
                     raise
             
+            # customers tablosuna contract_period kolonu ekle
+            try:
+                cursor.execute("ALTER TABLE customers ADD COLUMN contract_period TEXT DEFAULT 'Aylık'")
+                logging.info("customers tablosuna contract_period kolonu eklendi.")
+            except sqlite3.OperationalError as e:
+                if "duplicate column name" in str(e):
+                    logging.info("contract_period kolonu zaten mevcut.")
+                else:
+                    raise
+            
+            # customers tablosuna contract_price kolonu ekle
+            try:
+                cursor.execute("ALTER TABLE customers ADD COLUMN contract_price DECIMAL(12,4) DEFAULT 0")
+                logging.info("customers tablosuna contract_price kolonu eklendi.")
+            except sqlite3.OperationalError as e:
+                if "duplicate column name" in str(e):
+                    logging.info("contract_price kolonu zaten mevcut.")
+                else:
+                    raise
+            
+            # customers tablosuna contract_currency kolonu ekle
+            try:
+                cursor.execute("ALTER TABLE customers ADD COLUMN contract_currency VARCHAR(3) DEFAULT 'TL'")
+                logging.info("customers tablosuna contract_currency kolonu eklendi.")
+            except sqlite3.OperationalError as e:
+                if "duplicate column name" in str(e):
+                    logging.info("contract_currency kolonu zaten mevcut.")
+                else:
+                    raise
+            
             # service_records tablosuna technician_id kolonu ekle
             try:
                 cursor.execute("ALTER TABLE service_records ADD COLUMN technician_id INTEGER")
@@ -262,11 +292,11 @@ class DatabaseMigration:
             cursor.execute("PRAGMA table_info(stock_items)")
             stock_columns = [column[1] for column in cursor.fetchall()]
             
-            missing_columns = False
+            # invoices tablosunun kolonlarını kontrol et
+            cursor.execute("PRAGMA table_info(invoices)")
+            invoice_columns = [column[1] for column in cursor.fetchall()]
             
-            if 'sale_data_json' not in columns:
-                logging.info("sale_data_json kolonu eksik, ekleniyor...")
-                missing_columns = True
+            missing_columns = False
                 
             if 'invoice_id' not in columns:
                 logging.info("invoice_id kolonu eksik, ekleniyor...")
@@ -332,6 +362,10 @@ class DatabaseMigration:
             
             if 'min_stock_level' not in stock_columns:
                 logging.info("min_stock_level kolonu eksik, ekleniyor...")
+                missing_columns = True
+            
+            if 'items_json' not in invoice_columns:
+                logging.info("invoices items_json kolonu eksik, ekleniyor...")
                 missing_columns = True
             
             if missing_columns:
@@ -400,6 +434,21 @@ class DatabaseMigration:
                 )
             """)
             logging.info("company_info tablosu oluşturuldu/kontrol edildi.")
+            
+            # invoice_items tablosunu oluştur
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS invoice_items (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    invoice_id INTEGER NOT NULL,
+                    description TEXT NOT NULL,
+                    quantity DECIMAL(10,2) DEFAULT 1,
+                    unit_price DECIMAL(12,4) NOT NULL,
+                    currency VARCHAR(3) DEFAULT 'TL',
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (invoice_id) REFERENCES invoices(id)
+                )
+            """)
+            logging.info("invoice_items tablosu oluşturuldu/kontrol edildi.")
             
             self.db_manager.get_connection().commit()
             return True

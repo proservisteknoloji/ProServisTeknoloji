@@ -306,6 +306,9 @@ class MainWindow(QMainWindow):
             self.service_tab.data_changed.connect(self.invoicing_tab.refresh_data)
         if hasattr(self, 'service_tab') and hasattr(self, 'dashboard_tab') and self.service_tab and self.dashboard_tab:
             self.service_tab.data_changed.connect(self.dashboard_tab.refresh_data)
+        # Ensure stock tab refreshes when services change (show emanet devices)
+        if hasattr(self, 'service_tab') and hasattr(self, 'stock_tab') and self.service_tab and self.stock_tab:
+            self.service_tab.data_changed.connect(self.stock_tab.refresh_data)
 
         if hasattr(self, 'billing_tab') and hasattr(self, 'invoicing_tab') and self.billing_tab and self.invoicing_tab:
             self.billing_tab.data_changed.connect(self.invoicing_tab.refresh_data)

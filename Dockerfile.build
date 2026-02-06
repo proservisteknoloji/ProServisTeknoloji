@@ -1,0 +1,24 @@
+# ProServis - Windows EXE Build Container
+# Wine kullanarak Windows EXE oluşturma
+
+FROM tobix/pywine:3.12
+
+# Metadata
+LABEL maintainer="Ümit Sağdıç"
+LABEL version="2.3.0"
+LABEL description="ProServis Windows EXE Builder"
+
+WORKDIR /app
+
+# Python bağımlılıklarını kopyala
+COPY requirements.txt .
+
+# Windows Python ortamına bağımlılıkları kur
+RUN wine pip install --no-cache-dir -r requirements.txt \
+    && wine pip install --no-cache-dir pyinstaller==6.3.0
+
+# Uygulama dosyalarını kopyala
+COPY . .
+
+# Build komutu
+CMD ["wine", "python", "-m", "PyInstaller", "--clean", "ProServis.spec"]

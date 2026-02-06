@@ -125,12 +125,10 @@ hidden_imports = [
     
     # Ortam Değişkenleri
     'dotenv',
-    'python-dotenv',
     
     # Web Scraping
     'lxml',
     'bs4',
-    'beautifulsoup4',
     
     # Email
     'smtplib',

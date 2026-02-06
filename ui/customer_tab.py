@@ -212,7 +212,11 @@ class CustomerDeviceTab(QWidget):
         device_buttons = QHBoxLayout()
         self.add_device_btn = QPushButton("Yeni Cihaz")
         self.add_device_btn.setStyleSheet("QPushButton { background-color: #2196F3; color: white; font-weight: bold; }")
+        self.move_to_second_hand_btn = QPushButton("2. El Depoya Taşı")
+        self.move_to_second_hand_btn.setStyleSheet("QPushButton { background-color: #FF9800; color: white; font-weight: bold; }")
+        self.move_to_second_hand_btn.setEnabled(False)
         device_buttons.addWidget(self.add_device_btn)
+        device_buttons.addWidget(self.move_to_second_hand_btn)
         device_buttons.addStretch()
         device_layout.addLayout(device_buttons)
         
@@ -322,6 +326,7 @@ class CustomerDeviceTab(QWidget):
         self.contract_manage_btn.clicked.connect(self.manage_customer_contract)
         self.delete_customer_btn.clicked.connect(self.delete_selected_customer)
         self.add_device_btn.clicked.connect(self.add_new_device)
+        self.move_to_second_hand_btn.clicked.connect(self.move_selected_device_to_second_hand)
 
     def customer_selected(self):
         """Müşteri tablosundan bir öğe seçildiğinde tetiklenir."""
@@ -403,12 +408,14 @@ class CustomerDeviceTab(QWidget):
         selected_rows = self.device_table.selectionModel().selectedRows()
         if not selected_rows:
             self.selected_device_id = None
+            self.move_to_second_hand_btn.setEnabled(False)
             return
             
         item = self.device_table.item(selected_rows[0].row(), 0)
         if not item:
             return
         self.selected_device_id = int(item.text())
+        self.move_to_second_hand_btn.setEnabled(True)
 
     def change_device_location(self, item):
         """Cihaza çift tıklandığında lokasyon değiştirme dialogunu açar."""
@@ -698,6 +705,170 @@ class CustomerDeviceTab(QWidget):
             self.refresh_devices()
             self.data_changed.emit()
 
+    def move_selected_device_to_second_hand(self):
+        """Seçili müşteri cihazını 2. el depoya taşır."""
+        if not self.selected_device_id:
+            QMessageBox.warning(self, "Uyarı", "Lütfen bir cihaz seçin.")
+            return
+
+        try:
+            device_info = self.db.fetch_one("""
+                SELECT cd.id, cd.device_model, cd.serial_number, cd.notes,
+                       c.name as customer_name
+                FROM customer_devices cd
+                JOIN customers c ON c.id = cd.customer_id
+                WHERE cd.id = ?
+            """, (self.selected_device_id,))
+
+            if not device_info:
+                QMessageBox.warning(self, "Hata", "Cihaz bilgisi bulunamadı.")
+                return
+
+            from PyQt6.QtWidgets import QDialog, QFormLayout, QLineEdit, QComboBox, QDialogButtonBox, QLabel
+            from datetime import datetime
+
+            dialog = QDialog(self)
+            dialog.setWindowTitle("2. El Depoya Taşı")
+            dialog.setMinimumWidth(400)
+            layout = QFormLayout(dialog)
+
+            info_label = QLabel(
+                f"<b>Müşteri:</b> {device_info['customer_name']}<br>"
+                f"<b>Cihaz:</b> {device_info['device_model']}<br>"
+                f"<b>Seri No:</b> {device_info['serial_number']}"
+            )
+            layout.addRow(info_label)
+
+            date_input = QLineEdit()
+            date_input.setText(datetime.now().strftime("%Y-%m-%d"))
+            price_input = QLineEdit()
+            sale_price_input = QLineEdit()
+            status_combo = QComboBox()
+            status_combo.addItems(['Stokta', 'Serviste', 'Satıldı'])
+            reason_input = QLineEdit()
+            notes_input = QLineEdit()
+
+            layout.addRow("Alınma Tarihi:", date_input)
+            layout.addRow("Alış Fiyatı:", price_input)
+            layout.addRow("Satış Fiyatı:", sale_price_input)
+            layout.addRow("Durum:", status_combo)
+            layout.addRow("Alım Nedeni:", reason_input)
+            layout.addRow("Notlar:", notes_input)
+
+            buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+            buttons.accepted.connect(dialog.accept)
+            buttons.rejected.connect(dialog.reject)
+            layout.addRow(buttons)
+
+            if dialog.exec() != QDialog.DialogCode.Accepted:
+                return
+
+            reason_text = reason_input.text().strip()
+            notes_text = notes_input.text().strip()
+            if reason_text:
+                notes_text = f"{notes_text} | Alım nedeni: {reason_text}" if notes_text else f"Alım nedeni: {reason_text}"
+
+            data = {
+                'device_model': device_info['device_model'],
+                'serial_number': device_info['serial_number'],
+                'source_person': device_info['customer_name'],
+                'acquisition_date': date_input.text().strip(),
+                'purchase_price': float(price_input.text() or 0),
+                'sale_price': float(sale_price_input.text() or 0),
+                'status': status_combo.currentText(),
+                'notes': notes_text
+            }
+
+            # 2. el tablosuna ekle
+            self.db.execute_query(
+                """
+                INSERT INTO second_hand_devices 
+                (device_model, serial_number, source_person, acquisition_date, purchase_price, sale_price, status, notes)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    data['device_model'], data['serial_number'], data['source_person'],
+                    data['acquisition_date'], data['purchase_price'], data['sale_price'],
+                    data['status'], data['notes']
+                )
+            )
+
+            # Müşteri cihazını boşa al (customer_id = NULL)
+            move_note = f"2. el depoya taşındı: {data['acquisition_date']}"
+            self.db.execute_query(
+                """
+                UPDATE customer_devices
+                SET customer_id = NULL, location_id = NULL,
+                    notes = CASE
+                        WHEN notes IS NULL OR notes = '' THEN ?
+                        ELSE notes || '\n' || ?
+                    END
+                WHERE id = ?
+                """,
+                (move_note, move_note, self.selected_device_id)
+            )
+
+            # Normal stoka da ekle
+            self._add_second_hand_to_normal_stock(data)
+
+            self.refresh_devices()
+            self.data_changed.emit()
+
+            main_window = self.window()
+            if hasattr(main_window, 'stock_tab'):
+                main_window.stock_tab.refresh_second_hand_stock()
+                main_window.stock_tab.refresh_data()
+
+            QMessageBox.information(self, "Başarılı", "Cihaz 2. el depoya taşındı.")
+
+        except Exception as e:
+            QMessageBox.critical(self, "Hata", f"2. el depoya taşıma sırasında hata oluştu:\n{e}")
+
+    def _add_second_hand_to_normal_stock(self, device_data):
+        """2. El cihazı normal stoka ekler."""
+        try:
+            existing = self.db.fetch_one(
+                "SELECT id, quantity FROM stock_items WHERE name = ? AND item_type = 'Cihaz'",
+                (device_data['device_model'],)
+            )
+
+            if existing:
+                new_quantity = existing['quantity'] + 1
+                self.db.execute_query(
+                    "UPDATE stock_items SET quantity = ? WHERE id = ?",
+                    (new_quantity, existing['id'])
+                )
+                self.db.add_stock_movement(
+                    existing['id'], 'Giriş', 1,
+                    f"2. El cihaz eklendi - Seri No: {device_data['serial_number']}"
+                )
+            else:
+                stock_data = {
+                    'name': device_data['device_model'],
+                    'item_type': 'Cihaz',
+                    'part_number': device_data['serial_number'],
+                    'quantity': 1,
+                    'sale_price': device_data.get('sale_price') or (device_data['purchase_price'] * 1.2),
+                    'description': f"2. El cihaz - Alınan: {device_data['source_person']}"
+                }
+                new_id = self.db.execute_query(
+                    """
+                    INSERT INTO stock_items (name, item_type, part_number, quantity, sale_price, description)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        stock_data['name'], stock_data['item_type'], stock_data['part_number'],
+                        stock_data['quantity'], stock_data['sale_price'], stock_data['description']
+                    )
+                )
+                if new_id:
+                    self.db.add_stock_movement(
+                        new_id, 'Giriş', 1,
+                        f"2. El cihaz eklendi - Seri No: {device_data['serial_number']}"
+                    )
+        except Exception as e:
+            QMessageBox.warning(self, "Uyarı", f"Normal stok güncellenemedi: {e}")
+
     def save_device(self):
         """Yeni cihazı veya mevcut cihazdaki değişiklikleri veritabanına kaydeder."""
         if not self.model_input.text() or not self.serial_input.text():
@@ -798,19 +969,130 @@ class CustomerDeviceTab(QWidget):
         is_contract_combo.addItems(["Hayır", "Evet"])
         contract_start_date = QDateEdit()
         contract_end_date = QDateEdit()
+        contract_period_combo = QComboBox()
+        contract_period_combo.addItems(["Aylık", "Yıllık"])
+        contract_price_input = QLineEdit()
+        contract_price_input.setPlaceholderText("0.00")
+        contract_currency_combo = QComboBox()
+        contract_currency_combo.addItems(["TL", "USD", "EUR"])
+        bill_contract_btn = QPushButton("Faturalandır")
         contract_start_date.setDate(QDate.currentDate())
         contract_end_date.setDate(QDate.currentDate().addYears(1))
         contract_start_date.setCalendarPopup(True)
         contract_end_date.setCalendarPopup(True)
         contract_start_date.setEnabled(False)
         contract_end_date.setEnabled(False)
+        contract_price_input.setEnabled(False)
+        contract_currency_combo.setEnabled(False)
         
         def toggle_contract_fields():
             enabled = is_contract_combo.currentText() == "Evet"
             contract_start_date.setEnabled(enabled)
             contract_end_date.setEnabled(enabled)
+            contract_period_combo.setEnabled(enabled)
+            contract_price_input.setEnabled(enabled)
+            contract_currency_combo.setEnabled(enabled)
+            bill_contract_btn.setEnabled(enabled)
         
         is_contract_combo.currentTextChanged.connect(toggle_contract_fields)
+
+        def create_maintenance_invoice():
+            try:
+                customer_name = name_input.text().strip()
+                if not customer_name:
+                    QMessageBox.warning(dialog, "Uyarı", "Önce müşteri bilgilerini kaydedin.")
+                    return
+
+                price_text = contract_price_input.text() or "0"
+                print(f"DEBUG: Sözleşme bedeli text: '{price_text}'")
+                price = float(price_text)
+                print(f"DEBUG: Sözleşme bedeli float: {price}")
+                
+                if price <= 0:
+                    QMessageBox.warning(dialog, "Uyarı", f"Sözleşme bedeli girilmemiş veya 0. Mevcut değer: {price}")
+                    return
+
+                customer_id_value = customer_id or temp_customer_id
+                if not customer_id_value:
+                    customer_id_value = ensure_customer_saved()
+                if not customer_id_value:
+                    QMessageBox.warning(dialog, "Uyarı", "Müşteri kaydı bulunamadı.")
+                    return
+
+                from datetime import datetime
+                from decimal import Decimal
+                
+                # Sözleşme periyodu (Aylık/Yıllık) al
+                contract_period = contract_period_combo.currentText()
+                # Para birimi al
+                contract_currency = contract_currency_combo.currentText()
+                print(f"DEBUG: Sözleşme periyodu: {contract_period}, Para birimi: {contract_currency}")
+                print(f"DEBUG: Fatura oluşturuluyor - customer_id: {customer_id_value}, price: {price} {contract_currency}")
+                
+                # Fiyatı ondalık sayıya çevir
+                price_decimal = Decimal(str(price))
+                
+                # Para birimi TL değilse, güncel kur ile TL'ye çevir
+                price_tl = price_decimal
+                if contract_currency != 'TL':
+                    from utils.currency_converter import get_exchange_rates
+                    try:
+                        rates = get_exchange_rates()
+                        if contract_currency in rates:
+                            price_tl = price_decimal * Decimal(str(rates[contract_currency]))
+                            print(f"DEBUG: Kur dönüşümü: {price} {contract_currency} = {price_tl} TL (Kur: {rates[contract_currency]})")
+                        else:
+                            QMessageBox.warning(dialog, "Uyarı", f"Para birimi {contract_currency} için kur bulunamadı!")
+                            return
+                    except Exception as e:
+                        QMessageBox.warning(dialog, "Uyarı", f"Kur dönüşümü başarısız: {e}")
+                        return
+                
+                # Float'a geri çevir (veritabanı için)
+                price_tl_float = float(price_tl)
+                
+                invoice_id = self.db.execute_query(
+                    """
+                    INSERT INTO invoices (customer_id, invoice_date, total_amount, currency, notes, status, invoice_type)
+                    VALUES (?, ?, ?, ?, ?, 'Kesildi', 'Bakım Sözleşmesi')
+                    """,
+                    (
+                        customer_id_value,
+                        datetime.now().strftime("%Y-%m-%d"),
+                        price_tl_float,
+                        "TL",
+                        "Bakım Sözleşmesi Bedeli",
+                    ),
+                )
+                print(f"DEBUG: Fatura oluşturuldu, ID: {invoice_id}")
+
+                if invoice_id:
+                    # Bakım sözleşmesi bedeli için invoice_items tablosuna kalem ekle
+                    # Açıklamayı "Aylık" veya "Yıllık" ile birlikte oluştur
+                    if contract_currency == 'TL':
+                        item_description = f"Bakım Sözleşmesi {contract_period} Bedeli"
+                    else:
+                        item_description = f"Bakım Sözleşmesi {contract_period} Bedeli ({price} {contract_currency})"
+                    
+                    self.db.execute_query(
+                        """
+                        INSERT INTO invoice_items (invoice_id, description, quantity, unit_price, currency)
+                        VALUES (?, ?, ?, ?, ?)
+                        """,
+                        (
+                            invoice_id,
+                            item_description,
+                            1,
+                            price_tl_float,
+                            "TL",
+                        ),
+                    )
+                    print(f"DEBUG: Fatura kalemleri oluşturuldu - {item_description}")
+                    QMessageBox.information(dialog, "Başarılı", f"Faturalandırıldı.\n\nBedel: {price} {contract_currency} = {price_tl_float:.2f} TL")
+            except Exception as e:
+                QMessageBox.critical(dialog, "Hata", f"Faturalandırma hatası: {e}")
+
+        bill_contract_btn.clicked.connect(create_maintenance_invoice)
 
         customer_layout.addRow("Ad Soyad (*):", name_input)
         customer_layout.addRow("Telefon (*):", phone_input)
@@ -837,8 +1119,22 @@ class CustomerDeviceTab(QWidget):
         customer_layout.addRow("Vergi No:", tax_number_input)
         customer_layout.addRow("", QLabel())  # Boşluk
         customer_layout.addRow("Sözleşme Durumu:", is_contract_combo)
-        customer_layout.addRow("Sözleşme Başlangıç:", contract_start_date)
-        customer_layout.addRow("Sözleşme Bitiş:", contract_end_date)
+
+        contract_dates_layout = QHBoxLayout()
+        contract_dates_layout.addWidget(QLabel("Sözleşme Başlangıç:"))
+        contract_dates_layout.addWidget(contract_start_date)
+        contract_dates_layout.addWidget(QLabel("Sözleşme Bitiş:"))
+        contract_dates_layout.addWidget(contract_end_date)
+        contract_dates_layout.addWidget(QLabel("Sözleşme Bedeli:"))
+        contract_dates_layout.addWidget(contract_price_input)
+        contract_dates_layout.addWidget(contract_currency_combo)
+        contract_dates_layout.addStretch()
+        customer_layout.addRow(contract_dates_layout)
+
+        period_bill_layout = QHBoxLayout()
+        period_bill_layout.addWidget(contract_period_combo)
+        period_bill_layout.addWidget(bill_contract_btn)
+        customer_layout.addRow("Sözleşme Şekli:", period_bill_layout)
         
         tab_widget.addTab(customer_tab, "Müşteri Bilgileri")
         
@@ -940,6 +1236,10 @@ class CustomerDeviceTab(QWidget):
                     start_date_str = contract_start_date.date().toString("yyyy-MM-dd")
                     end_date_str = contract_end_date.date().toString("yyyy-MM-dd")
                 
+                contract_period_value = contract_period_combo.currentText() if is_contract_combo.currentText() == "Evet" else None
+                contract_price_value = float(contract_price_input.text() or 0) if is_contract_combo.currentText() == "Evet" else 0
+                contract_currency_value = contract_currency_combo.currentText() if is_contract_combo.currentText() == "Evet" else "TL"
+
                 params = (
                     name_input.text().strip(),
                     phone_input.text().strip(),
@@ -949,12 +1249,15 @@ class CustomerDeviceTab(QWidget):
                     tax_number_input.text().strip(),
                     1 if is_contract_combo.currentText() == "Evet" else 0,
                     start_date_str,
-                    end_date_str
+                    end_date_str,
+                    contract_period_value,
+                    contract_price_value,
+                    contract_currency_value
                 )
                 
                 # execute_query lastrowid döndürür
                 lastrowid = self.db.execute_query(
-                    "INSERT INTO customers (name, phone, email, address, tax_office, tax_id, is_contract, contract_start_date, contract_end_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", 
+                    "INSERT INTO customers (name, phone, email, address, tax_office, tax_id, is_contract, contract_start_date, contract_end_date, contract_period, contract_price, contract_currency) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", 
                     params
                 )
                 
@@ -1309,7 +1612,7 @@ class CustomerDeviceTab(QWidget):
 
         # Girinti tab_widget ile aynı hizada olmalı
         if is_editing:
-            customer_data = self.db.fetch_one("SELECT name, phone, email, address, tax_office, tax_id, is_contract, contract_start_date, contract_end_date FROM customers WHERE id = ?", (customer_id,))
+            customer_data = self.db.fetch_one("SELECT name, phone, email, address, tax_office, tax_id, is_contract, contract_start_date, contract_end_date, contract_period, contract_price, contract_currency FROM customers WHERE id = ?", (customer_id,))
             if customer_data:
                 name_input.setText(customer_data['name'] or "")
                 phone_input.setText(customer_data['phone'] or "")
@@ -1333,7 +1636,17 @@ class CustomerDeviceTab(QWidget):
                         end_date = QDate.fromString(str(contract_end_str), "yyyy-MM-dd")
                         if end_date.isValid():
                             contract_end_date.setDate(end_date)
-                    toggle_contract_fields()
+                    if customer_data[9]:  # contract_period
+                        contract_period_combo.setCurrentText(customer_data[9])
+                    if customer_data[10] is not None:  # contract_price
+                        contract_price_input.setText(str(customer_data[10]))
+                    if len(customer_data) > 11 and customer_data[11] is not None:  # contract_currency
+                        contract_currency_combo.setCurrentText(customer_data[11])
+                    else:
+                        contract_currency_combo.setCurrentText("TL")  # Varsayılan
+                else:
+                    is_contract_combo.setCurrentText("Hayır")
+                toggle_contract_fields()
             
             # Lokasyon ve cihaz verilerini yükle
             load_locations()
@@ -1367,6 +1680,10 @@ class CustomerDeviceTab(QWidget):
                         start_date_str = contract_start_date.date().toString("yyyy-MM-dd")
                         end_date_str = contract_end_date.date().toString("yyyy-MM-dd")
                     
+                    contract_period_value = contract_period_combo.currentText() if is_contract_combo.currentText() == "Evet" else None
+                    contract_price_value = float(contract_price_input.text() or 0) if is_contract_combo.currentText() == "Evet" else 0
+                    contract_currency_value = contract_currency_combo.currentText() if is_contract_combo.currentText() == "Evet" else "TL"
+
                     params = (
                         name_input.text().strip(),
                         phone_input.text().strip(),
@@ -1376,18 +1693,21 @@ class CustomerDeviceTab(QWidget):
                         tax_number_input.text().strip(),
                         1 if is_contract_combo.currentText() == "Evet" else 0,
                         start_date_str,
-                        end_date_str
+                        end_date_str,
+                        contract_period_value,
+                        contract_price_value,
+                        contract_currency_value
                     )
                     
                     # Eğer yeni müşteri ise ve zaten geçici kaydedilmişse (temp_customer_id varsa), güncelle
                     if temp_customer_id:
-                        self.db.execute_query("UPDATE customers SET name=?, phone=?, email=?, address=?, tax_office=?, tax_id=?, is_contract=?, contract_start_date=?, contract_end_date=? WHERE id=?", params + (temp_customer_id,))
+                        self.db.execute_query("UPDATE customers SET name=?, phone=?, email=?, address=?, tax_office=?, tax_id=?, is_contract=?, contract_start_date=?, contract_end_date=?, contract_period=?, contract_price=?, contract_currency=? WHERE id=?", params + (temp_customer_id,))
                     elif is_editing:
                         # Düzenleme modunda
-                        self.db.execute_query("UPDATE customers SET name=?, phone=?, email=?, address=?, tax_office=?, tax_id=?, is_contract=?, contract_start_date=?, contract_end_date=? WHERE id=?", params + (customer_id,))
+                        self.db.execute_query("UPDATE customers SET name=?, phone=?, email=?, address=?, tax_office=?, tax_id=?, is_contract=?, contract_start_date=?, contract_end_date=?, contract_period=?, contract_price=?, contract_currency=? WHERE id=?", params + (customer_id,))
                     else:
                         # Yeni müşteri ve henüz geçici kaydedilmemiş (bu durum oluşmamalı ama güvenlik için)
-                        lastrowid = self.db.execute_query("INSERT INTO customers (name, phone, email, address, tax_office, tax_id, is_contract, contract_start_date, contract_end_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", params)
+                        lastrowid = self.db.execute_query("INSERT INTO customers (name, phone, email, address, tax_office, tax_id, is_contract, contract_start_date, contract_end_date, contract_period, contract_price, contract_currency) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", params)
                         if lastrowid:
                             temp_customer_id = lastrowid
                     
@@ -1407,10 +1727,14 @@ class CustomerDeviceTab(QWidget):
             self.refresh_customers()
             self.data_changed.emit()
 
-    def edit_selected_customer(self):
+    def edit_selected_customer(self, item):
         """Seçili müşteriyi düzenleme diyalogunu açar."""
-        if self.selected_customer_id:
-            self.open_customer_dialog(customer_id=self.selected_customer_id)
+        # Çift tıklanan satırdan müşteri ID'sini al
+        row = item.row()
+        customer_id_item = self.customer_table.item(row, 0)
+        if customer_id_item:
+            customer_id = int(customer_id_item.text())
+            self.open_customer_dialog(customer_id=customer_id)
         else:
             QMessageBox.warning(self, "Uyarı", "Lütfen düzenlemek istediğiniz müşteriyi seçin.")
 

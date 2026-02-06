@@ -1,0 +1,83 @@
+# ProServis - Docker Compose Configuration
+# Geliştirme ve test ortamı için
+
+version: '3.8'
+
+services:
+  # Ana uygulama servisi
+  proservis-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: proservis-dev
+    image: proservis:2.3.0
+    
+    # Ortam değişkenleri
+    environment:
+      - PYTHONUNBUFFERED=1
+      - QT_QPA_PLATFORM=offscreen
+      - DISPLAY=${DISPLAY:-:0}
+    
+    # Volume mappings
+    volumes:
+      # Kaynak kodu mount et (geliştirme için)
+      - .:/app
+      # Veritabanı kalıcılığı için
+      - proservis-data:/app/data
+      # Config dosyaları için
+      - proservis-config:/root/.config/ProServis
+      # X11 socket (GUI için - Linux)
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+    
+    # Ağ ayarları
+    networks:
+      - proservis-network
+    
+    # Çalışma dizini
+    working_dir: /app
+    
+    # Restart politikası
+    restart: unless-stopped
+    
+    # Kaynak limitleri
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+
+  # Build servisi - EXE oluşturmak için
+  proservis-builder:
+    build:
+      context: .
+      dockerfile: Dockerfile.build
+    container_name: proservis-builder
+    image: proservis-builder:2.3.0
+    
+    volumes:
+      - .:/app
+      - ./dist:/app/dist
+      - ./build:/app/build
+    
+    working_dir: /app
+    
+    # Build komutunu çalıştır
+    command: ["python", "-m", "PyInstaller", "--clean", "ProServis.spec"]
+    
+    profiles:
+      - build
+
+# Volumes
+volumes:
+  proservis-data:
+    driver: local
+  proservis-config:
+    driver: local
+
+# Networks
+networks:
+  proservis-network:
+    driver: bridge

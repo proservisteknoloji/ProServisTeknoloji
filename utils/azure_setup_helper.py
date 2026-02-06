@@ -18,19 +18,22 @@ def check_odbc_driver():
         tuple: (has_modern_driver: bool, drivers: list)
     """
     # Azure entegrasyonu askıya alındı
-    pass
+    return (False, [])
 
 
 def get_download_url():
     """ODBC Driver 18 indirme URL'i"""
     # Azure entegrasyonu askıya alındı
-    pass
+    return "https://learn.microsoft.com/sql/connect/odbc/download-odbc-driver-for-sql-server"
 
 
 def open_download_page():
     """ODBC Driver indirme sayfasını aç"""
     # Azure entegrasyonu askıya alındı
-    pass
+    try:
+        webbrowser.open(get_download_url())
+    except Exception:
+        logger.exception("ODBC download page could not be opened")
 
 
 def get_connection_string_template(driver_name='ODBC Driver 17 for SQL Server'):
@@ -44,14 +47,16 @@ def get_connection_string_template(driver_name='ODBC Driver 17 for SQL Server'):
         Connection string template
     """
     # Azure entegrasyonu askıya alındı
-    pass
-SERVER=proservis.database.windows.net,1433;
-DATABASE=Proservis-Database;
-UID=<kullanici_adi>;
-PWD=<sifre>;
-Encrypt=yes;
-TrustServerCertificate=no;
-Connection Timeout=30;"""
+    return (
+        f"DRIVER={{{driver_name}}};\n"
+        "SERVER=proservis.database.windows.net,1433;\n"
+        "DATABASE=Proservis-Database;\n"
+        "UID=<kullanici_adi>;\n"
+        "PWD=<sifre>;\n"
+        "Encrypt=yes;\n"
+        "TrustServerCertificate=no;\n"
+        "Connection Timeout=30;"
+    )
 
 
 def show_setup_instructions():

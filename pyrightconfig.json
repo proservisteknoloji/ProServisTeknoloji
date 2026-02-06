@@ -1,4 +1,6 @@
 {
   "reportAttributeAccessIssue": "none",
-  "reportPossiblyUnboundVariable": "none"
+  "reportPossiblyUnboundVariable": "none",
+  "pythonVersion": "3.12",
+  "typeCheckingMode": "basic"
 }

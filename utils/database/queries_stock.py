@@ -482,17 +482,47 @@ class StockQueriesMixin:
                     if item_type == 'Cihaz' and serials:
                         for serial in serials:
                             if serial:  # Boş seri numarası kontrolü
-                                # Önce devices tablosuna ekle (eski sistem uyumluluğu için)
-                                cursor.execute(
-                                    "INSERT INTO devices (customer_id, model, serial_number, type, is_cpc, color_type) VALUES (?, ?, ?, ?, ?, ?)", 
-                                    (customer_id, description, serial, color_type, False, color_type)
-                                )
-                                # Sonra customer_devices tablosuna da ekle (yeni sistem)
-                                cursor.execute("""
-                                    INSERT INTO customer_devices 
-                                    (customer_id, device_model, serial_number, device_type, color_type, is_cpc, installation_date)
-                                    VALUES (?, ?, ?, ?, ?, ?, ?)
-                                """, (customer_id, description, serial, 'Yazıcı', color_type, 0, datetime.now().strftime('%Y-%m-%d')))
+                                # customer_devices kontrolü (seri numarası benzersiz)
+                                existing_cd = cursor.execute(
+                                    "SELECT id, customer_id FROM customer_devices WHERE serial_number = ?",
+                                    (serial,)
+                                ).fetchone()
+                                if existing_cd:
+                                    existing_customer_id = existing_cd[1]
+                                    if existing_customer_id and existing_customer_id != customer_id:
+                                        raise ValueError(f"Seri numarası başka bir müşteriye kayıtlı: {serial}")
+                                    # Aynı müşteri veya boştaysa, müşteriye bağla ve eklemeyi atla
+                                    if existing_customer_id != customer_id:
+                                        cursor.execute(
+                                            "UPDATE customer_devices SET customer_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                                            (customer_id, existing_cd[0])
+                                        )
+                                else:
+                                    cursor.execute("""
+                                        INSERT INTO customer_devices 
+                                        (customer_id, device_model, serial_number, device_type, color_type, is_cpc, installation_date)
+                                        VALUES (?, ?, ?, ?, ?, ?, ?)
+                                    """, (customer_id, description, serial, 'Yazıcı', color_type, 0, datetime.now().strftime('%Y-%m-%d')))
+
+                                # devices tablosu (eski sistem uyumluluğu)
+                                existing_dev = cursor.execute(
+                                    "SELECT id, customer_id FROM devices WHERE serial_number = ?",
+                                    (serial,)
+                                ).fetchone()
+                                if existing_dev:
+                                    existing_customer_id = existing_dev[1]
+                                    if existing_customer_id and existing_customer_id != customer_id:
+                                        raise ValueError(f"Seri numarası başka bir müşteriye kayıtlı: {serial}")
+                                    if existing_customer_id != customer_id:
+                                        cursor.execute(
+                                            "UPDATE devices SET customer_id = ? WHERE id = ?",
+                                            (customer_id, existing_dev[0])
+                                        )
+                                else:
+                                    cursor.execute(
+                                        "INSERT INTO devices (customer_id, model, serial_number, type, is_cpc, color_type) VALUES (?, ?, ?, ?, ?, ?)", 
+                                        (customer_id, description, serial, color_type, False, color_type)
+                                    )
                     
                     # Stoktan düş
                     cursor.execute("UPDATE stock_items SET quantity = quantity - ? WHERE id = ?", (quantity, item_id))

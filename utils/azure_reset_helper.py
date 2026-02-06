@@ -23,44 +23,7 @@ def reset_azure_and_create_test_users(azure_manager):
 def _clean_azure(azure_manager):
     """Azure'daki tüm company schema'larını ve kullanıcıları sil"""
     # Azure entegrasyonu askıya alındı
-    pass
-        logging.info(f"  📋 {len(schemas)} schema bulundu")
-        
-        for schema in schemas:
-            try:
-                logging.info(f"  🗑️ {schema} siliniyor...")
-                
-                # Schema içindeki tabloları sil
-                cursor.execute(f"""
-                    SELECT TABLE_NAME 
-                    FROM INFORMATION_SCHEMA.TABLES 
-                    WHERE TABLE_SCHEMA = '{schema}'
-                """)
-                tables = [row[0] for row in cursor.fetchall()]
-                
-                for table in tables:
-                    cursor.execute(f"DROP TABLE {schema}.{table}")
-                
-                # Schema'yı sil
-                cursor.execute(f"DROP SCHEMA {schema}")
-                logging.info(f"    ✅ {schema} silindi")
-                
-            except Exception as e:
-                logging.warning(f"    ⚠️ {schema} silinirken hata: {e}")
-                continue
-        
-        # global_users tablosunu temizle
-        logging.info("  🗑️ global_users tablosu temizleniyor...")
-        cursor.execute("DELETE FROM dbo.global_users")
-        azure_manager.connection.commit()
-        logging.info("  ✅ global_users temizlendi")
-        
-        logging.info("✅ Azure temizlendi")
-        return True
-        
-    except Exception as e:
-        logging.error(f"❌ Temizleme hatası: {e}")
-        return False
+    return False
 
 
 def _create_test_users(azure_manager):

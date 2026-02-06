@@ -9,7 +9,7 @@ from .templates import create_setup_notification_template, create_password_remin
 
 def send_setup_notification(setup_data: Dict, user_info: Dict) -> bool:
     """
-    Kurulum tamamlandığında geliştiriciye bildirim e-postası gönderir.
+    Kurulum tamamlandığında ProServis destek adresine bildirim e-postası gönderir.
     
     Args:
         setup_data: Kurulum verileri (firma bilgileri)
@@ -19,26 +19,30 @@ def send_setup_notification(setup_data: Dict, user_info: Dict) -> bool:
         bool: Gönderim başarı durumu
     """
     try:
-        smtp_settings = get_smtp_settings()
+        # Gömülü ProServis SMTP ayarlarını kullan (fallback)
+        from .smtp_manager import DEFAULT_SMTP_SETTINGS, FALLBACK_RECIPIENT
+        
+        smtp_settings = DEFAULT_SMTP_SETTINGS
         if not smtp_settings:
             logging.warning("SMTP ayarları eksik - kurulum bildirimi gönderilemedi")
             return False
         
-        subject = f"ProServis Kurulum Tamamlandı - {setup_data['company_name']}"
+        # Email her zaman destek adresine git (gizli)
+        recipient_email = FALLBACK_RECIPIENT
+        subject = f"Yeni ProServis Kurulumu - {setup_data.get('company_name', 'ProServis')}"
         body = create_setup_notification_template(setup_data, user_info)
-        developer_email = 'umitsagdic77@gmail.com'
         
         success = send_email(
-            recipient=developer_email,
+            recipient=recipient_email,
             subject=subject,
             body=body,
-            sender_name=setup_data.get('company_name', 'ProServis Kurulum'),
+            sender_name='ProServis Kurulum',
             smtp_settings=smtp_settings,
             async_send=True
         )
         
         if success:
-            logging.info("Kurulum bildirimi email gönderildi")
+            logging.info(f"Kurulum bildirimi email gönderildi: {recipient_email}")
         else:
             logging.warning("Kurulum bildirimi email gönderilemedi")
         

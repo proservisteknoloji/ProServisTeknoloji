@@ -294,21 +294,12 @@ class ServiceEditDialog(QDialog):
                 if self.device_combo.count() > 0:
                     self.device_combo.setCurrentIndex(0)
                     print(f"DEBUG: İlk cihaz seçildi: {self.device_combo.currentText()}")
-            
-            if dev_index > -1: 
-                self.device_combo.setCurrentIndex(dev_index)
-                print(f"DEBUG: Cihaz seçildi: {self.device_combo.currentText()}")
-            else:
-                print(f"DEBUG: Cihaz bulunamadı! Servis kaydındaki cihaz ID {dev_id} combo box'ta yok.")
-                # Alternatif: İlk cihazı seç
-                if self.device_combo.count() > 0:
-                    self.device_combo.setCurrentIndex(0)
-                    print(f"DEBUG: İlk cihaz seçildi: {self.device_combo.currentText()}")
 
             tech_index = self.technician_combo.findData(tech_id)
             if tech_index > -1: self.technician_combo.setCurrentIndex(tech_index)
                 
             self.problem_input.setText(problem or "")
+
             self.notes_input.setText(notes or "")
             self.status_combo.setCurrentText(status)
             self.bw_counter_input.setText(str(bw or ''))
