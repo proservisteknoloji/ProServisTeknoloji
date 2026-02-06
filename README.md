@@ -57,6 +57,24 @@
 | ✅ CSV Import/Export | Toplu müşteri aktarımı (10x hızlı) |
 | ✅ Müşteri Kartı | Detaylı müşteri bilgi kartı görüntüleme |
 
+---
+
+## 🧭 Hızlı Tanıtım (Özet)
+ProServis, teknik servis operasyonlarını tek merkezden yönetmek için tasarlanmış bir platformdur. Müşteri, cihaz, servis, stok ve faturalama süreçlerini birbirine bağlı şekilde yönetir. Son güncellemelerle 2. el cihaz akışı, stok senkronu ve satış güvenliği güçlendirildi.
+
+### 🆕 Son Güncellemeler (Kısa)
+- 2. el cihaz ekleme ekranında **müşteri cihazı seçimi ve filtreleme**
+- Müşteri sekmesinde **“2. El Depoya Taşı”**
+- 2. el cihaz listesinde **çift tıklama ile düzenleme**
+- 2. el listesinde **arama (model/seri no/kişi)**
+- Hurda cihazlar listede kalır, **düzenlenebilir**
+- Hurda cihazlar **normal stokta görünür** ve satılabilir
+- 2. el cihaz–normal stok **otomatik senkron**
+- Bekleyen satışta **seri numarası çakışması** için güvenli kontrol
+- OpenAI bağımlılığı **opsiyonel**, uygulama açılışını bloklamaz
+
+Detaylı tanıtım için `GUIDE.md` dosyasına bakabilirsiniz.
+
 ### 🖨️ Cihaz Yönetimi
 | Özellik | Açıklama |
 |---------|----------|
