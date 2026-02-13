@@ -100,17 +100,26 @@ class StockTab(QWidget):
 
     def refresh_emanet_stock(self):
         """Emanet stokları yeniler."""
-        self.emanet_table.setRowCount(0)
-        # Cihaz ve servis kaydı ile birlikte arıza ve beklenen parça bilgisini çek
+        self.emanet_table.setRowCount(0)        # Cihaz ve servis kayd? ile birlikte ar?za ve beklenen par?a bilgisini ?ek
+        # Not: Yaln?zca serviste bekleyen cihazlar listelenir (teslimata kadar).
         query = '''
             SELECT s.id, s.name, s.part_number as serial_number, s.quantity,
                    sr.problem_description, sr.notes,
                    (SELECT GROUP_CONCAT(description, ', ') FROM quote_items WHERE service_record_id = sr.id AND unit_price IS NULL) as waiting_parts
             FROM stock_items s
-            LEFT JOIN service_records sr ON sr.device_id = (
-                SELECT cd.id FROM customer_devices cd WHERE cd.serial_number = s.part_number LIMIT 1
-            ) AND sr.status IN ('Servise alındı', 'Parça bekleniyor', 'İşleme alındı')
-            WHERE s.item_type = 'Cihaz' AND s.is_consignment = 1 AND sr.id IS NOT NULL
+            LEFT JOIN service_records sr ON sr.id = (
+                SELECT sr2.id FROM service_records sr2
+                WHERE sr2.device_id = (
+                    SELECT cd.id FROM customer_devices cd WHERE cd.serial_number = s.part_number LIMIT 1
+                )
+                ORDER BY sr2.created_date DESC, sr2.id DESC
+                LIMIT 1
+            )
+            WHERE s.item_type = 'Cihaz'
+              AND s.is_consignment = 1
+              AND s.quantity > 0
+              AND sr.id IS NOT NULL
+              AND sr.status NOT IN ('Onarıldı', 'Teslim Edildi', 'İptal edildi')
             ORDER BY s.name
         '''
         emanet_items = self.db.fetch_all(query)
@@ -184,10 +193,11 @@ class StockTab(QWidget):
         btn_layout = QHBoxLayout()
         self.add_second_hand_btn = QPushButton("➕ 2. El Cihaz Ekle")
         self.scrap_device_btn = QPushButton("🗑️ Hurda Çıkar")
+        self.delete_second_hand_btn = QPushButton("🗑️ Cihazı Sil")
         self.print_second_hand_btn = QPushButton("🖨️ 2. El Listesi Yazdır")
         
         # Buton stilleri
-        for btn in [self.add_second_hand_btn, self.scrap_device_btn, self.print_second_hand_btn]:
+        for btn in [self.add_second_hand_btn, self.scrap_device_btn, self.delete_second_hand_btn, self.print_second_hand_btn]:
             btn.setStyleSheet("""
                 QPushButton {
                     background-color: #2196F3;
@@ -213,11 +223,25 @@ class StockTab(QWidget):
                 background-color: #D32F2F;
             }
         """)
+        self.delete_second_hand_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #B71C1C;
+                color: white;
+                font-weight: bold;
+                border-radius: 6px;
+                padding: 8px 16px;
+            }
+            QPushButton:hover {
+                background-color: #8E0000;
+            }
+        """)
         
         self.scrap_device_btn.setEnabled(False)
+        self.delete_second_hand_btn.setEnabled(False)
         
         btn_layout.addWidget(self.add_second_hand_btn)
         btn_layout.addWidget(self.scrap_device_btn)
+        btn_layout.addWidget(self.delete_second_hand_btn)
         btn_layout.addStretch()
         btn_layout.addWidget(self.print_second_hand_btn)
         layout.addLayout(btn_layout)
@@ -257,6 +281,7 @@ class StockTab(QWidget):
         # Sinyalleri bağla
         self.add_second_hand_btn.clicked.connect(self.add_second_hand_device)
         self.scrap_device_btn.clicked.connect(self.scrap_second_hand_device)
+        self.delete_second_hand_btn.clicked.connect(self.delete_second_hand_device)
         self.print_second_hand_btn.clicked.connect(self.print_second_hand_list)
         self.second_hand_table.itemSelectionChanged.connect(self.second_hand_device_selected)
         self.second_hand_table.itemDoubleClicked.connect(self.edit_second_hand_device)
@@ -601,6 +626,24 @@ class StockTab(QWidget):
         # GRUP 4: SATIŞ (Ayrı vurgulanmış alan)
         sales_group = QGroupBox("💵 Satış İşlemleri")
         sales_layout = QHBoxLayout(sales_group)
+        self.purchase_invoice_btn = QPushButton("Al\u0131\u015f Faturas\u0131")
+        self.purchase_invoice_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #2196F3;
+                color: white;
+                font-weight: bold;
+                font-size: 14px;
+                border-radius: 8px;
+                padding: 15px 25px;
+                min-height: 50px;
+                min-width: 150px;
+                border: none;
+            }
+            QPushButton:hover {
+                background-color: #1976D2;
+            }
+        """)
+        sales_layout.addWidget(self.purchase_invoice_btn)
         
         self.new_sale_btn = QPushButton("🛒 Yeni Satış")
         self.new_sale_btn.setStyleSheet("""
@@ -651,6 +694,7 @@ class StockTab(QWidget):
             self.delete_item_btn.clicked.connect(self.delete_stock_item)
         
         self.stock_settings_btn.clicked.connect(self.open_stock_settings_dialog)
+        self.purchase_invoice_btn.clicked.connect(self.open_purchase_invoice_dialog)
         self.price_settings_btn.clicked.connect(self.open_price_settings_dialog)
         self.device_analysis_btn.clicked.connect(self.open_device_analysis_dialog)
         self.new_sale_btn.clicked.connect(self.open_tabbed_sale_dialog)
@@ -1581,6 +1625,12 @@ class StockTab(QWidget):
                 self.stock_table.selectRow(row)
                 return
 
+    def open_purchase_invoice_dialog(self):
+        from ui.dialogs.purchase_invoice_dialog import PurchaseInvoiceDialog
+        dialog = PurchaseInvoiceDialog(self.db, self)
+        if dialog.exec():
+            self.refresh_stock_list()
+
     def open_stock_settings_dialog(self):
         """Stok ayarları diyalogunu açar."""
         from ui.dialogs.stock_settings_dialog import StockSettingsDialog
@@ -2306,8 +2356,10 @@ class StockTab(QWidget):
         if selection_model:
             selected_rows = selection_model.selectedRows()
             self.scrap_device_btn.setEnabled(len(selected_rows) > 0)
+            self.delete_second_hand_btn.setEnabled(len(selected_rows) > 0)
         else:
             self.scrap_device_btn.setEnabled(False)
+            self.delete_second_hand_btn.setEnabled(False)
 
     def scrap_second_hand_device(self):
         """Seçili 2. El cihazı hurdaya çıkarır."""
@@ -2356,6 +2408,69 @@ class StockTab(QWidget):
         except Exception as e:
             log_error("StockTab", e)
             QMessageBox.critical(self, "Hata", f"Hurda çıkarma işlemi başarısız: {e}")
+
+    def delete_second_hand_device(self):
+        """Seçili 2. El cihazı tamamen siler."""
+        selection_model = self.second_hand_table.selectionModel()
+        if not selection_model:
+            return
+
+        selected_rows = selection_model.selectedRows()
+        if not selected_rows:
+            return
+
+        try:
+            row = selected_rows[0].row()
+            id_item = self.second_hand_table.item(row, 0)
+            model_item = self.second_hand_table.item(row, 1)
+            serial_item = self.second_hand_table.item(row, 2)
+
+            if not id_item or not model_item or not serial_item:
+                QMessageBox.warning(self, "Hata", "Cihaz bilgileri eksik!")
+                return
+
+            device_id = int(id_item.text())
+            device_model = model_item.text()
+            serial_number = serial_item.text()
+
+            reply = QMessageBox.question(
+                self,
+                "Silme Onayı",
+                "Bu işlem geri alınamaz. Cihazı tamamen silmek istediğinizden eminmisiniz?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No
+            )
+            if reply != QMessageBox.StandardButton.Yes:
+                return
+
+            # Normal stoktan düş (varsa)
+            try:
+                self._remove_second_hand_from_normal_stock(device_model, serial_number)
+            except Exception:
+                pass
+
+            # 2. el cihaz kaydını sil
+            self.db.execute_query(
+                "DELETE FROM second_hand_devices WHERE id = ?",
+                (device_id,)
+            )
+
+            # Müşteri cihazı kaydı boşta ise temizle (seri no bazlı)
+            try:
+                self.db.execute_query(
+                    "DELETE FROM customer_devices WHERE serial_number = ? AND (customer_id IS NULL OR customer_id = '')",
+                    (serial_number,)
+                )
+            except Exception:
+                pass
+
+            self.refresh_second_hand_stock()
+            self.refresh_data()
+            QMessageBox.information(self, "Başarılı", "Cihaz tamamen silindi.")
+
+        except Exception as e:
+            log_error("StockTab", e)
+            QMessageBox.critical(self, "Hata", f"Silme işlemi başarısız: {e}")
 
     def _remove_second_hand_from_normal_stock(self, device_model, serial_number):
         """2. El cihazı normal stoktan çıkarır."""

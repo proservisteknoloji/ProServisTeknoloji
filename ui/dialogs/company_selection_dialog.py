@@ -10,6 +10,8 @@ from PyQt6.QtWidgets import (
     QLabel, QListWidget, QListWidgetItem, QLineEdit,
     QMessageBox, QProgressDialog, QGroupBox, QTextEdit
 )
+import logging
+logger = logging.getLogger(__name__)
 from PyQt6.QtCore import Qt, QThread, pyqtSignal
 from PyQt6.QtGui import QIcon
 from datetime import datetime
@@ -338,9 +340,9 @@ if __name__ == '__main__':
     dialog = CompanySelectionDialog(drive_manager)
     
     if dialog.exec():
-        print(f"Selected: {dialog.selected_company}")
-        print(f"DB Path: {dialog.selected_db_path}")
+        logger.info(f"Selected: {dialog.selected_company}")
+        logger.info(f"DB Path: {dialog.selected_db_path}")
     else:
-        print("Cancelled")
+        logger.info("Cancelled")
     
     sys.exit(0)

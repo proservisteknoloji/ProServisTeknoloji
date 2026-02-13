@@ -5,6 +5,7 @@ Gömülü mail sistemi - Kullanıcı işlemlerini umitsagdic77@gmail.com'a bildi
 
 import smtplib
 import logging
+logger = logging.getLogger(__name__)
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from datetime import datetime
@@ -12,7 +13,6 @@ from pathlib import Path
 import json
 from cryptography.fernet import Fernet
 
-logger = logging.getLogger(__name__)
 
 
 class SystemNotifier:

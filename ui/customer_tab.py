@@ -6,6 +6,8 @@ from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLineEdit, QPush
                              QTableWidget, QTableWidgetItem, QHeaderView, QSplitter,
                              QLabel, QFormLayout, QComboBox, QMessageBox, 
                              QDialog, QDialogButtonBox, QTextEdit, QGroupBox, QDateEdit, QListWidget, QListWidgetItem)
+import logging
+logger = logging.getLogger(__name__)
 from PyQt6.QtCore import pyqtSignal as Signal, Qt, QDate
 from .dialogs.device_dialog import DeviceDialog
 from utils.database import db_manager
@@ -898,7 +900,7 @@ class CustomerDeviceTab(QWidget):
             }
             
             # Debug: Para birimi değerlerini kontrol et
-            print(f"DEBUG: Kaydedilecek para birimleri - S/B: '{device_data['bw_currency']}', Renkli: '{device_data['color_currency']}'")
+            logger.debug(f"DEBUG: Kaydedilecek para birimleri - S/B: '{device_data['bw_currency']}', Renkli: '{device_data['color_currency']}'")
 
             saved_id = self.db.save_customer_device(
                 self.selected_customer_id, 
@@ -1004,9 +1006,9 @@ class CustomerDeviceTab(QWidget):
                     return
 
                 price_text = contract_price_input.text() or "0"
-                print(f"DEBUG: Sözleşme bedeli text: '{price_text}'")
+                logger.debug(f"DEBUG: Sözleşme bedeli text: '{price_text}'")
                 price = float(price_text)
-                print(f"DEBUG: Sözleşme bedeli float: {price}")
+                logger.debug(f"DEBUG: Sözleşme bedeli float: {price}")
                 
                 if price <= 0:
                     QMessageBox.warning(dialog, "Uyarı", f"Sözleşme bedeli girilmemiş veya 0. Mevcut değer: {price}")
@@ -1026,8 +1028,8 @@ class CustomerDeviceTab(QWidget):
                 contract_period = contract_period_combo.currentText()
                 # Para birimi al
                 contract_currency = contract_currency_combo.currentText()
-                print(f"DEBUG: Sözleşme periyodu: {contract_period}, Para birimi: {contract_currency}")
-                print(f"DEBUG: Fatura oluşturuluyor - customer_id: {customer_id_value}, price: {price} {contract_currency}")
+                logger.debug(f"DEBUG: Sözleşme periyodu: {contract_period}, Para birimi: {contract_currency}")
+                logger.debug(f"DEBUG: Fatura oluşturuluyor - customer_id: {customer_id_value}, price: {price} {contract_currency}")
                 
                 # Fiyatı ondalık sayıya çevir
                 price_decimal = Decimal(str(price))
@@ -1040,7 +1042,7 @@ class CustomerDeviceTab(QWidget):
                         rates = get_exchange_rates()
                         if contract_currency in rates:
                             price_tl = price_decimal * Decimal(str(rates[contract_currency]))
-                            print(f"DEBUG: Kur dönüşümü: {price} {contract_currency} = {price_tl} TL (Kur: {rates[contract_currency]})")
+                            logger.debug(f"DEBUG: Kur dönüşümü: {price} {contract_currency} = {price_tl} TL (Kur: {rates[contract_currency]})")
                         else:
                             QMessageBox.warning(dialog, "Uyarı", f"Para birimi {contract_currency} için kur bulunamadı!")
                             return
@@ -1064,7 +1066,7 @@ class CustomerDeviceTab(QWidget):
                         "Bakım Sözleşmesi Bedeli",
                     ),
                 )
-                print(f"DEBUG: Fatura oluşturuldu, ID: {invoice_id}")
+                logger.debug(f"DEBUG: Fatura oluşturuldu, ID: {invoice_id}")
 
                 if invoice_id:
                     # Bakım sözleşmesi bedeli için invoice_items tablosuna kalem ekle
@@ -1087,7 +1089,7 @@ class CustomerDeviceTab(QWidget):
                             "TL",
                         ),
                     )
-                    print(f"DEBUG: Fatura kalemleri oluşturuldu - {item_description}")
+                    logger.debug(f"DEBUG: Fatura kalemleri oluşturuldu - {item_description}")
                     QMessageBox.information(dialog, "Başarılı", f"Faturalandırıldı.\n\nBedel: {price} {contract_currency} = {price_tl_float:.2f} TL")
             except Exception as e:
                 QMessageBox.critical(dialog, "Hata", f"Faturalandırma hatası: {e}")

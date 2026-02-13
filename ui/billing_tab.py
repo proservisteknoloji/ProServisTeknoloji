@@ -2,6 +2,8 @@
 import json
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
+import logging
+logger = logging.getLogger(__name__)
 
 from PyQt6.QtCore import Qt, QDate, pyqtSignal as Signal
 from PyQt6.QtWidgets import (
@@ -139,9 +141,9 @@ class BillingTab(QWidget):
             return
             
         try:
-            print(f"DEBUG: Müşteri ID: {customer_id} için cihazlar alınıyor...")
+            logger.debug(f"DEBUG: Müşteri ID: {customer_id} için cihazlar alınıyor...")
             devices = self.db.get_cpc_devices_for_customer(customer_id)
-            print(f"DEBUG: {len(devices) if devices else 0} cihaz bulundu")
+            logger.debug(f"DEBUG: {len(devices) if devices else 0} cihaz bulundu")
             
             if not devices:
                 # Artık CPC cihazı olmayan müşteriler listede olmayacağı için
@@ -156,11 +158,10 @@ class BillingTab(QWidget):
 
             self.meters_table.setRowCount(len(devices))
             for row, device in enumerate(devices):
-                print(f"DEBUG: Cihaz {row}: {device}")
+                logger.debug(f"DEBUG: Cihaz {row}: {device}")
                 self._add_device_row_to_table(row, device)
         except Exception as e:
             import traceback
-            import logging
             error_details = traceback.format_exc()
             logging.error(f"populate_devices_for_customer hatası: {error_details}")
             QMessageBox.critical(self, "Veritabanı Hatası", f"Cihazlar yüklenirken bir hata oluştu:\n{str(e)}\n\nDetay:\n{error_details}")
@@ -275,7 +276,7 @@ class BillingTab(QWidget):
 
     def create_invoice(self):
         """Seçili müşteri için faturalandırılmamış CPC okumalarından fatura oluşturur."""
-        print("DEBUG: create_invoice fonksiyonu çağrıldı")
+        logger.debug("DEBUG: create_invoice fonksiyonu çağrıldı")
         customer_id = self.customer_combo.currentData()
         if not customer_id:
             QMessageBox.warning(self, "Uyarı", "Lütfen bir müşteri seçin.")
@@ -285,16 +286,16 @@ class BillingTab(QWidget):
         end_date = self.end_date_edit.date().toString("yyyy-MM-dd")
 
         try:
-            print(f"DEBUG: get_billable_cpc_data çağrılıyor - customer_id: {customer_id}, start_date: {start_date}, end_date: {end_date}")
+            logger.debug(f"DEBUG: get_billable_cpc_data çağrılıyor - customer_id: {customer_id}, start_date: {start_date}, end_date: {end_date}")
             billable_data = self.db.get_billable_cpc_data(customer_id, start_date, end_date)
-            print(f"DEBUG: billable_data alındı - {len(billable_data) if billable_data else 0} kayıt")
+            logger.debug(f"DEBUG: billable_data alındı - {len(billable_data) if billable_data else 0} kayıt")
 
             if not billable_data:
                 QMessageBox.information(self, "Bilgi", "Seçilen tarih aralığında faturalandırılacak yeni sayaç okuması bulunamadı.")
                 return
 
             rates = get_exchange_rates()
-            print(f"DEBUG-RATES: TCMB'den çekilen döviz kurları: {rates}")
+            logger.debug(f"DEBUG-RATES: TCMB'den çekilen döviz kurları: {rates}")
             
             # Kur kontrolü - eksik kurları belirle
             missing_currencies = []
@@ -313,7 +314,7 @@ class BillingTab(QWidget):
                 error_msg += f"• İnternet bağlantınız aktif mi?\n"
                 error_msg += f"• TCMB web sitesine erişim var mı?\n\n"
                 error_msg += f"Not: Varsayılan kurlar kullanılacak ancak fatura tutarları yanlış olabilir."
-                print(f"⚠️ UYARI: {error_msg}")
+                logger.warning(f"⚠️ UYARI: {error_msg}")
                 
                 # Kullanıcıya uyarı göster ama devam etmesine izin ver (varsayılan kurlarla)
                 reply = QMessageBox.warning(
@@ -324,10 +325,10 @@ class BillingTab(QWidget):
                 if reply != QMessageBox.StandardButton.Yes:
                     return
 
-            print("DEBUG: _process_billing_data çağrılıyor")
+            logger.debug("DEBUG: _process_billing_data çağrılıyor")
             invoice_details, grand_total_tl = self._process_billing_data(billable_data, rates, customer_id, start_date, end_date)
 
-            print(f"DEBUG: Fatura detayları oluşturuldu - {len(invoice_details)} kalem, toplam: {grand_total_tl} TL")
+            logger.debug(f"DEBUG: Fatura detayları oluşturuldu - {len(invoice_details)} kalem, toplam: {grand_total_tl} TL")
 
             if not invoice_details:
                 QMessageBox.warning(self, "Uyarı", "Hesaplama sonrası faturalandırılacak veri bulunamadı.")
@@ -342,7 +343,7 @@ class BillingTab(QWidget):
 
             # Faturayı veritabanına kaydet
             details_json = json.dumps([{k: str(v) for k, v in item.items()} for item in invoice_details], ensure_ascii=False, indent=4)
-            print(f"DEBUG-JSON: invoice_details (STRINGIFIED): {details_json}")
+            logger.debug(f"DEBUG-JSON: invoice_details (STRINGIFIED): {details_json}")
 
             invoice_id = self.db.create_cpc_invoice(
                 location_id=location_id,
@@ -385,7 +386,7 @@ class BillingTab(QWidget):
                             "total": float(item.get('total_tl', 0)),
                             "currency": 'TL'  # Her zaman TL göster
                         }
-                        print(f"DEBUG: Kiralama bedeli PDF kalemi: {rental_item}")
+                        logger.debug(f"DEBUG: Kiralama bedeli PDF kalemi: {rental_item}")
                         pdf_items.append(rental_item)
                     else:
                         # Normal CPC kalemi
@@ -406,7 +407,7 @@ class BillingTab(QWidget):
                                 "total": bw_total_tl,
                                 "currency": 'TL'  # Her zaman TL göster
                             }
-                            print(f"DEBUG: S/B PDF kalemi: {bw_item}")
+                            logger.debug(f"DEBUG: S/B PDF kalemi: {bw_item}")
                             pdf_items.append(bw_item)
                         
                         # Renkli kullanım kalemi (eğer kullanım varsa)
@@ -421,10 +422,10 @@ class BillingTab(QWidget):
                                 "total": color_total_tl,
                                 "currency": 'TL'  # Her zaman TL göster
                             }
-                            print(f"DEBUG: Renkli PDF kalemi: {color_item}")
+                            logger.debug(f"DEBUG: Renkli PDF kalemi: {color_item}")
                             pdf_items.append(color_item)
 
-                print(f"DEBUG-PDFITEMS: pdf_items={pdf_items}")
+                logger.debug(f"DEBUG-PDFITEMS: pdf_items={pdf_items}")
                 pdf_data = {
                     'id': invoice_id,
                     'invoice_date': end_date,
@@ -469,17 +470,10 @@ class BillingTab(QWidget):
         # Cihaz bazında verileri toplulaştır
         device_aggregates = {}
         
-        # Müşterinin sözleşme durumunu kontrol et
         if not customer_id and billable_data:
             customer_id = billable_data[0].get('customer_id')
-        
-        customer_info = None
-        if customer_id:
-            customer_info = self.db.fetch_one("SELECT is_contract FROM customers WHERE id = ?", (customer_id,))
-        
-        is_contract_customer = bool(customer_info and customer_info[0]) if customer_info else False
-        
-        print(f"DEBUG: Müşteri ID: {customer_id}, Sözleşme durumu: {is_contract_customer}")
+            
+        logger.debug(f"DEBUG: Müşteri ID: {customer_id}")
         
         for data in billable_data:
             device_id = data.get('device_id')
@@ -528,12 +522,12 @@ class BillingTab(QWidget):
                 bw_currency = device_data['cpc_bw_currency']
                 color_currency = device_data['cpc_color_currency']
                 
-                print(f"DEBUG-CURRENCY: Cihaz {device_id} - Ham para birimleri: BW='{bw_currency}', Color='{color_currency}'")
+                logger.debug(f"DEBUG-CURRENCY: Cihaz {device_id} - Ham para birimleri: BW='{bw_currency}', Color='{color_currency}'")
                 
                 # Normalize currency codes: map common variants to ISO codes used in rates
                 def _normalize_currency(cur):
                     if not cur:
-                        print(f"DEBUG-CURRENCY: Para birimi boş/None, varsayılan TL kullanılıyor")
+                        logger.debug(f"DEBUG-CURRENCY: Para birimi boş/None, varsayılan TL kullanılıyor")
                         return 'TL'
                     c = str(cur).strip().upper()
                     original_c = c
@@ -545,58 +539,58 @@ class BillingTab(QWidget):
                         c = 'TL'
                     else:
                         # Bilinmeyen para birimi - logla ve varsayılan olarak TL kullan
-                        print(f"DEBUG-CURRENCY: Bilinmeyen para birimi '{original_c}', TL olarak işleniyor")
+                        logger.debug(f"DEBUG-CURRENCY: Bilinmeyen para birimi '{original_c}', TL olarak işleniyor")
                         c = 'TL'
                     
                     if original_c != c:
-                        print(f"DEBUG-CURRENCY: Para birimi normalize edildi: '{original_c}' -> '{c}'")
+                        logger.debug(f"DEBUG-CURRENCY: Para birimi normalize edildi: '{original_c}' -> '{c}'")
                     return c
                 bw_currency = _normalize_currency(bw_currency)
                 color_currency = _normalize_currency(color_currency)
                 
-                print(f"DEBUG-CURRENCY: Normalize edilmiş para birimleri: BW='{bw_currency}', Color='{color_currency}'")
-                print(f"DEBUG-RATES: Mevcut döviz kurları: {rates}")
-                print(f"DEBUG-RATES: BW para birimi '{bw_currency}' için kur: {rates.get(bw_currency, 'BULUNAMADI')}")
-                print(f"DEBUG-RATES: Color para birimi '{color_currency}' için kur: {rates.get(color_currency, 'BULUNAMADI')}")
+                logger.debug(f"DEBUG-CURRENCY: Normalize edilmiş para birimleri: BW='{bw_currency}', Color='{color_currency}'")
+                logger.debug(f"DEBUG-RATES: Mevcut döviz kurları: {rates}")
+                logger.debug(f"DEBUG-RATES: BW para birimi '{bw_currency}' için kur: {rates.get(bw_currency, 'BULUNAMADI')}")
+                logger.debug(f"DEBUG-RATES: Color para birimi '{color_currency}' için kur: {rates.get(color_currency, 'BULUNAMADI')}")
                 
                 bw_rate = Decimal(str(rates.get(bw_currency, 1.0)))
                 color_rate = Decimal(str(rates.get(color_currency, 1.0)))
                 
                 # Kur kontrolü - eğer döviz ise ama kur 1.0 ise uyarı ver
                 if bw_currency != 'TL' and bw_rate == Decimal('1.0'):
-                    print(f"⚠️ UYARI: {bw_currency} için kur bulunamadı, 1.0 kullanılıyor!")
+                    logger.warning(f"⚠️ UYARI: {bw_currency} için kur bulunamadı, 1.0 kullanılıyor!")
                 if color_currency != 'TL' and color_rate == Decimal('1.0'):
-                    print(f"⚠️ UYARI: {color_currency} için kur bulunamadı, 1.0 kullanılıyor!")
+                    logger.warning(f"⚠️ UYARI: {color_currency} için kur bulunamadı, 1.0 kullanılıyor!")
 
-                print(f"DEBUG-CALC: ═══ Cihaz {device_id} Hesaplama Başlangıcı ═══")
-                print(f"DEBUG-CALC: BW Kullanım: {bw_usage} sayfa")
-                print(f"DEBUG-CALC: BW Birim Fiyat: {cpc_bw_price} {bw_currency}")
-                print(f"DEBUG-CALC: BW Kur: {bw_rate}")
-                print(f"DEBUG-CALC: Color Kullanım: {color_usage} sayfa")
-                print(f"DEBUG-CALC: Color Birim Fiyat: {cpc_color_price} {color_currency}")
-                print(f"DEBUG-CALC: Color Kur: {color_rate}")
+                logger.debug(f"DEBUG-CALC: ═══ Cihaz {device_id} Hesaplama Başlangıcı ═══")
+                logger.debug(f"DEBUG-CALC: BW Kullanım: {bw_usage} sayfa")
+                logger.debug(f"DEBUG-CALC: BW Birim Fiyat: {cpc_bw_price} {bw_currency}")
+                logger.debug(f"DEBUG-CALC: BW Kur: {bw_rate}")
+                logger.debug(f"DEBUG-CALC: Color Kullanım: {color_usage} sayfa")
+                logger.debug(f"DEBUG-CALC: Color Birim Fiyat: {cpc_color_price} {color_currency}")
+                logger.debug(f"DEBUG-CALC: Color Kur: {color_rate}")
 
                 # Toplam maliyetleri hesapla (orijinal para biriminde)
                 total_bw_cost = bw_usage * cpc_bw_price
                 total_color_cost = color_usage * cpc_color_price
                 
-                print(f"DEBUG-CALC: BW Toplam Maliyet ({bw_currency}): {total_bw_cost}")
-                print(f"DEBUG-CALC: Color Toplam Maliyet ({color_currency}): {total_color_cost}")
+                logger.debug(f"DEBUG-CALC: BW Toplam Maliyet ({bw_currency}): {total_bw_cost}")
+                logger.debug(f"DEBUG-CALC: Color Toplam Maliyet ({color_currency}): {total_color_cost}")
 
                 # TL'ye çevir
                 total_bw_cost_tl = total_bw_cost * bw_rate
                 total_color_cost_tl = total_color_cost * color_rate
                 
-                print(f"DEBUG-CALC: BW Toplam Maliyet (TL): {bw_currency} {total_bw_cost} × {bw_rate} = {total_bw_cost_tl} TL")
-                print(f"DEBUG-CALC: Color Toplam Maliyet (TL): {color_currency} {total_color_cost} × {color_rate} = {total_color_cost_tl} TL")
+                logger.debug(f"DEBUG-CALC: BW Toplam Maliyet (TL): {bw_currency} {total_bw_cost} × {bw_rate} = {total_bw_cost_tl} TL")
+                logger.debug(f"DEBUG-CALC: Color Toplam Maliyet (TL): {color_currency} {total_color_cost} × {color_rate} = {total_color_cost_tl} TL")
 
                 # TL'ye çevrilmiş birim fiyatları da hesapla
                 cpc_bw_price_tl = (cpc_bw_price * bw_rate).quantize(Decimal('0.0001'))
                 cpc_color_price_tl = (cpc_color_price * color_rate).quantize(Decimal('0.0001'))
                 
-                print(f"DEBUG-CALC: BW Birim Fiyat (TL): {bw_currency} {cpc_bw_price} × {bw_rate} = {cpc_bw_price_tl} TL")
-                print(f"DEBUG-CALC: Color Birim Fiyat (TL): {color_currency} {cpc_color_price} × {color_rate} = {cpc_color_price_tl} TL")
-                print(f"DEBUG-CALC: ═══ Cihaz {device_id} Hesaplama Sonu ═══")
+                logger.debug(f"DEBUG-CALC: BW Birim Fiyat (TL): {bw_currency} {cpc_bw_price} × {bw_rate} = {cpc_bw_price_tl} TL")
+                logger.debug(f"DEBUG-CALC: Color Birim Fiyat (TL): {color_currency} {cpc_color_price} × {color_rate} = {cpc_color_price_tl} TL")
+                logger.debug(f"DEBUG-CALC: ═══ Cihaz {device_id} Hesaplama Sonu ═══")
 
                 device_total_tl = total_bw_cost_tl + total_color_cost_tl
                 grand_total_tl += device_total_tl
@@ -626,35 +620,35 @@ class BillingTab(QWidget):
             except (InvalidOperation, TypeError) as e:
                 raise ValueError(f"Fatura verisi işlenirken geçersiz bir değerle karşılaşıldı: {e} (Cihaz ID: {device_id})")
 
-        # Sözleşmeli müşteriler için aylık kiralama bedelini ekle
-        if is_contract_customer and customer_id:
-            print(f"DEBUG: Sözleşmeli müşteri tespit edildi, kiralama bedelleri aranıyor...")
+        # Cihazlara tanımlı aylık kiralama bedellerini ekle
+        if customer_id:
+            logger.debug(f"DEBUG: Müşteri için kiralama bedelleri aranıyor...")
             rental_devices = self.db.fetch_all("""
                 SELECT id, device_model as model, serial_number, rental_fee, rental_currency 
                 FROM customer_devices 
                 WHERE customer_id = ? AND rental_fee > 0
             """, (customer_id,))
             
-            print(f"DEBUG: {len(rental_devices)} adet kiralama bedeli olan cihaz bulundu")
+            logger.debug(f"DEBUG: {len(rental_devices)} adet kiralama bedeli olan cihaz bulundu")
             if rental_devices:
                 for i, rd in enumerate(rental_devices):
-                    print(f"DEBUG: Kiralama cihaz {i}: {rd}")
+                    logger.debug(f"DEBUG: Kiralama cihaz {i}: {rd}")
             else:
-                print("DEBUG: rental_devices listesi boş")
+                logger.debug("DEBUG: rental_devices listesi boş")
             
             for device in rental_devices:
                 device_id, model, serial_number, rental_fee, rental_currency = device
                 rental_fee = Decimal(str(rental_fee))
                 
-                print(f"DEBUG-RENTAL: ═══ Kiralama Bedeli Hesaplama Başlangıcı ═══")
-                print(f"DEBUG-RENTAL: Cihaz: {model} ({serial_number})")
-                print(f"DEBUG-RENTAL: Ham kiralama bedeli: {rental_fee} {rental_currency}")
+                logger.debug(f"DEBUG-RENTAL: ═══ Kiralama Bedeli Hesaplama Başlangıcı ═══")
+                logger.debug(f"DEBUG-RENTAL: Cihaz: {model} ({serial_number})")
+                logger.debug(f"DEBUG-RENTAL: Ham kiralama bedeli: {rental_fee} {rental_currency}")
                 
                 if rental_fee > 0:
                     # Para birimini normalize et (aynı _normalize_currency fonksiyonunu kullan)
                     def _normalize_rental_currency(cur):
                         if not cur:
-                            print(f"DEBUG-RENTAL: Kiralama para birimi boş/None, varsayılan TL kullanılıyor")
+                            logger.debug(f"DEBUG-RENTAL: Kiralama para birimi boş/None, varsayılan TL kullanılıyor")
                             return 'TL'
                         c = str(cur).strip().upper()
                         original_c = c
@@ -665,26 +659,26 @@ class BillingTab(QWidget):
                         elif c in ('TL', 'TRY', '₺', 'TÜRK LİRASI', 'TURK LIRASI'): 
                             c = 'TL'
                         else:
-                            print(f"DEBUG-RENTAL: Bilinmeyen kiralama para birimi '{original_c}', TL olarak işleniyor")
+                            logger.debug(f"DEBUG-RENTAL: Bilinmeyen kiralama para birimi '{original_c}', TL olarak işleniyor")
                             c = 'TL'
                         
                         if original_c != c:
-                            print(f"DEBUG-RENTAL: Kiralama para birimi normalize edildi: '{original_c}' -> '{c}'")
+                            logger.debug(f"DEBUG-RENTAL: Kiralama para birimi normalize edildi: '{original_c}' -> '{c}'")
                         return c
                     
                     rental_currency = _normalize_rental_currency(rental_currency)
-                    print(f"DEBUG-RENTAL: Normalize edilmiş para birimi: {rental_currency}")
+                    logger.debug(f"DEBUG-RENTAL: Normalize edilmiş para birimi: {rental_currency}")
                     
                     # Kiralama bedelini TL'ye çevir
                     rental_rate = Decimal(str(rates.get(rental_currency, 1.0)))
-                    print(f"DEBUG-RENTAL: Döviz kuru ({rental_currency}): {rental_rate}")
+                    logger.debug(f"DEBUG-RENTAL: Döviz kuru ({rental_currency}): {rental_rate}")
                     
                     # Kur kontrolü
                     if rental_currency != 'TL' and rental_rate == Decimal('1.0'):
-                        print(f"⚠️ UYARI: Kiralama bedeli için {rental_currency} kuru bulunamadı, 1.0 kullanılıyor!")
+                        logger.warning(f"⚠️ UYARI: Kiralama bedeli için {rental_currency} kuru bulunamadı, 1.0 kullanılıyor!")
                     
                     rental_fee_tl = rental_fee * rental_rate
-                    print(f"DEBUG-RENTAL: Kiralama bedeli TL: {rental_currency} {rental_fee} × {rental_rate} = {rental_fee_tl} TL")
+                    logger.debug(f"DEBUG-RENTAL: Kiralama bedeli TL: {rental_currency} {rental_fee} × {rental_rate} = {rental_fee_tl} TL")
                     
                     # Prorata hesaplama: start/end tarihleri verildiyse, kiralama bedelinin fatura periyoduna göre hesaplanması
                     rental_billed_tl = rental_fee_tl
@@ -700,21 +694,21 @@ class BillingTab(QWidget):
                             if 28 <= days <= 31:
                                 quantity_for_rental = 1.0
                                 rental_billed_tl = rental_fee_tl
-                                print(f"DEBUG-RENTAL: Tam ay ({days} gün), quantity=1, tutar={rental_billed_tl} TL")
+                                logger.debug(f"DEBUG-RENTAL: Tam ay ({days} gün), quantity=1, tutar={rental_billed_tl} TL")
                             else:
                                 # Kısmi ay için prorata hesaplama (30 gün üzerinden)
                                 quantity_for_rental = float((Decimal(days) / Decimal(30)).quantize(Decimal('0.01')))
                                 rental_billed_tl = (rental_fee_tl * Decimal(days) / Decimal(30)).quantize(Decimal('0.01'))
-                                print(f"DEBUG-RENTAL: Prorata hesaplama: {days} gün / 30 gün = {quantity_for_rental}")
-                                print(f"DEBUG-RENTAL: Prorata kiralama bedeli: {rental_fee_tl} × {quantity_for_rental} = {rental_billed_tl} TL")
+                                logger.debug(f"DEBUG-RENTAL: Prorata hesaplama: {days} gün / 30 gün = {quantity_for_rental}")
+                                logger.debug(f"DEBUG-RENTAL: Prorata kiralama bedeli: {rental_fee_tl} × {quantity_for_rental} = {rental_billed_tl} TL")
                         except Exception as ex:
-                            print(f"DEBUG-RENTAL: Prorata hesaplama hatası: {ex}, tam aylık ücret kullanılıyor")
+                            logger.debug(f"DEBUG-RENTAL: Prorata hesaplama hatası: {ex}, tam aylık ücret kullanılıyor")
                             rental_billed_tl = rental_fee_tl
                             quantity_for_rental = 1.0
                     
                     grand_total_tl += rental_billed_tl
-                    print(f"DEBUG-RENTAL: Faturaya eklenen tutar: {rental_billed_tl} TL")
-                    print(f"DEBUG-RENTAL: ═══ Kiralama Bedeli Hesaplama Sonu ═══")
+                    logger.debug(f"DEBUG-RENTAL: Faturaya eklenen tutar: {rental_billed_tl} TL")
+                    logger.debug(f"DEBUG-RENTAL: ═══ Kiralama Bedeli Hesaplama Sonu ═══")
                     
                     # Kiralama bedeli kalemi olarak fatura detayına ekle
                     rental_detail = {
@@ -730,7 +724,7 @@ class BillingTab(QWidget):
                         'is_rental': True  # Bu kalemin kiralama bedeli olduğunu belirt
                     }
                     invoice_details.append(rental_detail)
-                    print(f"DEBUG: Kiralama bedeli fatura detayına eklendi")
+                    logger.debug(f"DEBUG: Kiralama bedeli fatura detayına eklendi")
 
         return invoice_details, grand_total_tl
 

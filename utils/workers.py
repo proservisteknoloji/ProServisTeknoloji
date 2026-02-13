@@ -34,7 +34,6 @@ def normalize_email_address(email: str) -> str:
         return email
 
 # Logging yapılandırması
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 # İsteğe bağlı bağımlılıkları güvenli bir şekilde içe aktar
 try:

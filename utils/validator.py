@@ -7,10 +7,10 @@ geçerliliğini kontrol etmek için kullanılır.
 
 import hashlib
 import logging
+logger = logging.getLogger(__name__)
 from typing import Optional
 
 # Logging yapılandırması
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 # DİKKAT: Bu gizli anahtar, `key_generator.py` içindeki anahtar ile birebir aynı olmalıdır.
 # Güvenlik notu: Bu anahtarın kod içinde statik olarak bulunması ideal bir pratik değildir.
@@ -80,7 +80,7 @@ def validate_key(activation_key: Optional[str]) -> bool:
 
 # --- Örnek Kullanım ve Test ---
 if __name__ == '__main__':
-    print("Aktivasyon anahtarı doğrulama testi başlatılıyor...")
+    logger.info("Aktivasyon anahtarı doğrulama testi başlatılıyor...")
     
     # Örnek geçerli anahtarlar (key_generator.py ile üretilmiş)
     valid_key_1 = "0001-443B-2767-1647"
@@ -110,13 +110,13 @@ if __name__ == '__main__':
         actual_key = None if key_to_test == "None" else key_to_test
         result = validate_key(actual_key)
         status = "BAŞARILI" if result == expected_result else "BAŞARISIZ"
-        print(f"'{key_to_test}' testi: Beklenen={expected_result}, Alınan={result} -> {status}")
+        logger.info(f"'{key_to_test}' testi: Beklenen={expected_result}, Alınan={result} -> {status}")
         if result != expected_result:
             all_passed = False
             
-    print("\nTest tamamlandı.")
+    logger.info("\nTest tamamlandı.")
     if all_passed:
-        print("Tüm testler başarıyla geçti!")
+        logger.info("Tüm testler başarıyla geçti!")
     else:
-        print("Bazı testler başarısız oldu!")
+        logger.info("Bazı testler başarısız oldu!")
 

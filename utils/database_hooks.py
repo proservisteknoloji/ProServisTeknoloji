@@ -8,8 +8,8 @@ Veritabanı değişikliklerini izlemek için hook sistemi
 from typing import Callable, Dict, Any, List
 from functools import wraps
 import logging
-
 logger = logging.getLogger(__name__)
+
 
 
 class DatabaseHookManager:

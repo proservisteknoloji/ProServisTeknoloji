@@ -191,6 +191,11 @@ class CompanySettingsDialog(QDialog):
                 INSERT OR REPLACE INTO settings (key, value)
                 VALUES ('company_tax_number', ?)
             """, (company_data['tax_number'],))
+
+            db_manager.execute_query("""
+                INSERT OR REPLACE INTO settings (key, value)
+                VALUES ('company_tax_id', ?)
+            """, (company_data['tax_number'],))
             
             # KDV oranı ve logo için settings_manager kullanmaya devam et
             settings = {

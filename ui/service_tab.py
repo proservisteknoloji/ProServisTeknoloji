@@ -1,6 +1,7 @@
 # ui/service_tab.py
 
 import logging
+logger = logging.getLogger(__name__)
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLineEdit,
                              QPushButton, QTableWidget, QTableWidgetItem,
                              QHeaderView, QLabel, QMessageBox, QComboBox,
@@ -143,7 +144,7 @@ class ServiceTab(QWidget):
             for tech_id, username in technicians:
                 self.technician_filter.addItem(username, tech_id)
         except Exception as e:
-            print(f"Teknisyen filtresi yüklenirken hata: {e}")
+            logger.error(f"Teknisyen filtresi yüklenirken hata: {e}")
 
     def set_technician_mode(self, user_id: int):
         """Teknisyen modunu ayarlar ve sadece ilgili kayıtları gösterir."""

@@ -1,6 +1,7 @@
 # ui/dashboard_tab.py
 
 import logging
+logger = logging.getLogger(__name__)
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
                              QPushButton, QGroupBox, QGridLayout, QMessageBox)
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal as Signal
@@ -310,7 +311,7 @@ class DashboardTab(QWidget):
                 'expired': expired
             }
         except Exception as e:
-            print(f"Müşteri istatistikleri hesaplanırken hata: {e}")
+            logger.error(f"Müşteri istatistikleri hesaplanırken hata: {e}")
             return {'total': 0, 'contract': 0, 'expiring_this_month': 0, 'expired': 0}
 
     def show_monthly_invoices(self):

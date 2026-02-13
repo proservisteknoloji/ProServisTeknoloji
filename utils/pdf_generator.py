@@ -7,6 +7,7 @@ Türkçe karakter desteği sağlar ve modern, tutarlı bir tasarım sunar.
 """
 import os
 import logging
+logger = logging.getLogger(__name__)
 import uuid
 from decimal import Decimal, ROUND_HALF_UP, InvalidOperation
 from datetime import datetime
@@ -27,7 +28,6 @@ from reportlab.pdfbase.ttfonts import TTFont
 from .currency_converter import get_exchange_rates
 
 # Logging yapılandırması
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 # --- FONT YÖNETİMİ ---
 
@@ -252,7 +252,7 @@ def _create_document_header(comp_info: Dict[str, Any], cust_info: Dict[str, Any]
     company_phone = comp_info.get('company_phone') or comp_info.get('phone') or ''
     company_email = comp_info.get('company_email') or comp_info.get('email') or ''
     company_tax_office = comp_info.get('company_tax_office') or comp_info.get('tax_office') or ''
-    company_tax_id = comp_info.get('company_tax_id') or comp_info.get('tax_id') or ''
+    company_tax_id = comp_info.get('company_tax_id') or comp_info.get('tax_id') or comp_info.get('company_tax_number') or ''
     
     # Eğer firma adı boşsa varsayılan kullan
     if not company_name:
@@ -298,7 +298,7 @@ def _calculate_currency_totals(items: List[Dict[str, Any]]) -> Dict[str, Decimal
     for item in items:
         qty = Decimal(str(item.get('quantity', 1)))
         price = Decimal(str(item.get('unit_price', 0)))
-        item_currency = item.get('currency', 'TL')
+        item_currency = (item.get('currency', 'TL') or 'TL').strip().upper()
         
         # Eğer 'total' alanı verilmişse onu kullan, yoksa hesapla
         if 'total' in item and item['total'] is not None:
@@ -321,131 +321,132 @@ def _calculate_currency_totals(items: List[Dict[str, Any]]) -> Dict[str, Decimal
     
     return currency_totals
 
-def _create_currency_totals_table(currency_totals: Dict[str, Decimal], vat_rate: Decimal) -> Table:
-    """Para birimi bazında toplamları ve TL karşılıklarını gösteren tablo oluşturur."""
+def _create_currency_totals_table(currency_totals: Dict[str, Decimal], vat_rate: Decimal, rates_used: Dict[str, Decimal] = None) -> Table:
+    """Para birimi baz\u0131nda toplamlar? ve TL karşılıklarını gösteren tablo oluşturur."""
     font_name, font_name_bold = get_font_names()
     table_data = []
     total_tl = Decimal('0.00')
-    
+
     # Her para birimi için satır ekle
-    # Normalize and display totals primarily in TL. If there are other currencies, show their TL equivalent.
     for currency, amount in currency_totals.items():
         if currency == 'TL':
             amount_tl = amount
             table_data.append([f"Toplam {currency}:", f"{amount:,.2f} {currency}", ""])
         else:
-            amount_tl = convert_to_tl(amount, currency)
-            # Döviz kuru al
-            rates = get_exchange_rates()
-            rate = rates.get(currency, 1)
-            # Show the foreign currency total as its TL equivalent to avoid confusion
-            table_data.append([f"Toplam {currency} (TL karşılığı):", f"{amount_tl:,.2f} TL", f"(Kur: {rate:.4f})"])
-        
+            rate_value = None
+            if rates_used and currency in rates_used:
+                rate_value = rates_used.get(currency)
+            if rate_value is None:
+                rates = get_exchange_rates()
+                rate_value = rates.get(currency, 1)
+            rate = Decimal(str(rate_value))
+            amount_tl = (amount * rate).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+            table_data.append([f"Toplam {currency} (TL kar\u015f\u0131l\u0131\u011f\u0131):", f"{amount_tl:,.2f} TL", f"(Kur: {rate:,.4f})"])
+
         total_tl += amount_tl
-    
+
     # KDV hesapla
     total_vat_amount = (total_tl * (vat_rate / 100)).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
     grand_total_tl = total_tl + total_vat_amount
-    
-    # Alt toplam ve KDV satırları
-    table_data.append(["", "", ""])  # Boş satır
+
+    # Alt toplam ve KDV satırlar?
+    table_data.append(["", "", ""])  # Bo? satır
     table_data.append(["Ara Toplam (TL):", "", f"{total_tl:,.2f} TL"])
     table_data.append([f"KDV (%{vat_rate}):", "", f"{total_vat_amount:,.2f} TL"])
     table_data.append(["Vergiler Dahil Toplam:", "", f"{grand_total_tl:,.2f} TL"])
-    
+
     totals_table = Table(table_data, colWidths=[50*mm, 60*mm, 70*mm])
     totals_table.setStyle(TableStyle([
         ('ALIGN', (0,0), (-1,-1), 'RIGHT'),
         ('FONTNAME', (0,0), (-1,-1), font_name),
         ('FONTSIZE', (0,0), (-1,-1), 10),
-        # Kur bilgileri için küçük font boyutu
+        # Kur bilgileri için k?k font boyutu
         ('FONTSIZE', (2,0), (2,-4), 7),
         ('BACKGROUND', (0,-1), (-1,-1), colors.HexColor('#F3F4F6')),
         ('FONTNAME', (0,-1), (0,-1), font_name_bold),
         ('FONTNAME', (0,-2), (0,-2), font_name_bold),
-        # Izgara kaldırıldı - sadece önemli satırlar için çizgi
-        ('LINEBELOW', (0,-3), (-1,-3), 0.5, colors.black),  # Ara toplam öncesi çizgi
-        ('LINEBELOW', (0,-1), (-1,-1), 1, colors.black),    # Son toplam altı çizgi
+        # Izgara kald?r?ld? - sadece ?nemli satırlar için ?izgi
+        ('LINEBELOW', (0,-3), (-1,-3), 0.5, colors.black),  # Ara toplam \u00f6ncesi \u00e7izgi
+        ('LINEBELOW', (0,-1), (-1,-1), 1, colors.black),    # Son toplam alt\u0131 \u00e7izgi
     ]))
-    
+
     return totals_table, grand_total_tl
 
+
 def _create_items_table(items: List[Dict[str, Any]], vat_rate: Decimal, currency: str) -> Tuple[Table, Dict[str, Decimal]]:
-    """Ürün/hizmet tablosunu oluşturur ve para birimi bazında toplamları döndürür."""
+    """\u00dcr\u00fcn/hizmet tablosunu olu\u015fturur ve para birimi baz\u0131nda toplamlar\u0131 d\u00f6nd\u00fcr\u00fcr."""
     styles = get_professional_styles()
     styleN = styles["styleN"]
     font_name, font_name_bold = get_font_names()
 
-    headers = ["#", "Açıklama", "Miktar", "Birim Fiyat", "KDV", "Tutar"]
+    headers = ["#", "A\u00e7\u0131klama", "Miktar", "Fiyat", "Kur", "Tutar"]
     table_data = [headers]
-    currency_totals = {}
 
     for i, item in enumerate(items, 1):
-        desc = item.get('description', 'Açıklama Yok')
+        desc = item.get('description', 'A\u00e7\u0131klama Yok')
         qty = Decimal(str(item.get('quantity', 1)))
         price = Decimal(str(item.get('unit_price', 0)))
-        item_currency = item.get('currency', currency)
+        item_currency = (item.get('currency', currency) or 'TL').strip().upper()
         price_tl = Decimal(str(item.get('unit_price_tl', price)))
         total_tl = Decimal(str(item.get('total_tl', qty * price_tl)))
-        # Açıklama: sayfa sadece orijinal birim fiyat ve TL karşılığı (döviz kuru ile çarpılmış gerçek değer)
-        # Bakım Sözleşmesi items'ı için (description'da "Bedeli" varsa) TL ekleme yapma
-        if "Bedeli" not in desc:
-            if item_currency != 'TL' and price_tl != price:
-                desc = f"{desc} ({price:,.3f} {item_currency} ≈ {price_tl:,.4f} TL)"
-            else:
-                desc = f"{desc} ({price_tl:,.4f} TL)"
-        print(f"DEBUG: PDF item {i}: description='{desc}', quantity={qty}, unit_price={price_tl}, currency=TL")
-        # Tabloda gösterilecek değerler: show original currency and TL equivalent when applicable
-        if item_currency != 'TL' and price != price_tl:
-            display_price = f"{price:,.4f} {item_currency} ≈ {price_tl:,.2f} TL"
+        logger.debug(f"DEBUG: PDF item {i}: description='{desc}', quantity={qty}, unit_price={price_tl}, currency=TL")
+
+        display_price = f"{price_tl:,.2f} TL"
+        fx_total = (qty * price)
+        rate_value = item.get('exchange_rate')
+        if rate_value is None:
+            try:
+                rate_value = get_exchange_rates().get(item_currency, 1.0)
+            except Exception:
+                rate_value = 1.0
+        if item_currency != 'TL':
+            display_rate = f"{item_currency} {fx_total:,.2f} / {float(rate_value):,.4f}"
         else:
-            display_price = f"{price_tl:,.2f} TL"
+            display_rate = "-"
         display_total = f"{total_tl:,.2f} TL"
-        
+
         qty_display = f"{qty:.0f}" if qty == qty.quantize(Decimal('1')) else f"{qty:.2f}"
         table_data.append([
             str(i),
             Paragraph(f"<font name='DejaVuSans'>{desc}</font>", styleN),
             qty_display,
             display_price,
-            f"%{vat_rate}",
+            display_rate,
             display_total
         ])
 
-    items_table = Table(table_data, colWidths=[12*mm, 70*mm, 18*mm, 30*mm, 18*mm, 27*mm])
+    items_table = Table(table_data, colWidths=[12*mm, 78*mm, 16*mm, 24*mm, 30*mm, 25*mm])
     items_table.setStyle(TableStyle([
         ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#F8F9FA')),
         ('TEXTCOLOR', (0,0), (-1,0), colors.black),
         ('ALIGN', (0,0), (-1,-1), 'CENTER'),
-        ('ALIGN', (1,1), (1,-1), 'LEFT'),  # Açıklama sütunu sola hizalı
+        ('ALIGN', (1,1), (1,-1), 'LEFT'),  # A\u00e7\u0131klama s?tunu sola hizal?
         ('FONTNAME', (0,0), (-1,0), font_name_bold),
         ('FONTSIZE', (0,0), (-1,-1), 9),
         ('FONTNAME', (0,1), (-1,-1), font_name),
         ('GRID', (0,0), (-1,-1), 0.5, colors.black),
         ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
     ]))
-    
-    # Para birimi bazında toplamları hesapla
+
     currency_totals = _calculate_currency_totals(items)
     return items_table, currency_totals
 
 def _create_combined_items_table(items: List[Dict[str, Any]], vat_rate: Decimal, currency: str) -> Tuple[Table, Dict[str, Decimal]]:
-    """Birleşik fatura için fatura referansı ile birlikte kalemlerini içeren tabloyu oluşturur. Para birimi bazında hesaplar."""
+    """Birle\u015fik fatura i\u00e7in fatura referans? ile birlikte kalemlerini i\u00e7eren tabloyu olu\u015fturur. Para birimi baz\u0131nda hesaplar."""
     styles = get_professional_styles()
     styleN = styles["styleN"]
     font_name, font_name_bold = get_font_names()
 
-    headers = ["#", "Açıklama", "Miktar", "Birim Fiyat", "KDV", "Tutar", "Fatura Ref."]
+    headers = ["#", "A\u00e7\u0131klama", "Miktar", "Fiyat", "Kur", "Tutar", "Fatura Ref"]
     table_data = [headers]
     currency_totals = {}
 
     for i, item in enumerate(items, 1):
-        desc = item.get('description', 'Açıklama Yok')
+        desc = item.get('description', 'A\u00e7\u0131klama Yok')
         qty = Decimal(str(item.get('quantity', 1)))
         price = Decimal(str(item.get('unit_price', 0)))
-        item_currency = item.get('currency', currency)
-        
-        # Eğer 'total' alanı verilmişse onu kullan, yoksa hesapla (orijinal para biriminde)
+        item_currency = (item.get('currency', currency) or 'TL').strip().upper()
+
         if 'total' in item and item['total'] is not None:
             try:
                 total_value = item['total']
@@ -455,45 +456,62 @@ def _create_combined_items_table(items: List[Dict[str, Any]], vat_rate: Decimal,
                     total_value = total_value.replace(',', '.')
                 total_original = Decimal(str(total_value)).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
             except (ValueError, TypeError, InvalidOperation) as e:
-                print(f"DEBUG: Total değeri dönüştürme hatası: {item['total']} - Hata: {e}")
+                logger.debug(f"DEBUG: Total de\u011feri d\u00f6n\u00fc\u015ft\u00fcrme hatas\u0131: {item['total']} - Hata: {e}")
                 total_original = (qty * price).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
         else:
             total_original = (qty * price).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
-        
-        # Para birimi bazında topla
+
         if item_currency not in currency_totals:
             currency_totals[item_currency] = Decimal('0.00')
         currency_totals[item_currency] += total_original
-        
+
         invoice_ref = item.get('invoice_ref', 'N/A')
-        
-        # Tabloda gösterilecek değerler (temiz ve okunabilir)
-        display_price = f"{price:,.2f} {item_currency}"
-        display_total = f"{total_original:,.2f} {item_currency}"
-        
+
+        rate_value = item.get('exchange_rate')
+        if rate_value is None and item_currency == 'TL':
+            rate_value = 1
+        if rate_value is not None:
+            try:
+                price_tl = Decimal(str(item.get('unit_price_tl', Decimal(str(rate_value)) * price)))
+            except Exception:
+                price_tl = Decimal(str(rate_value)) * price
+        else:
+            price_tl = Decimal(str(item.get('unit_price_tl', price)))
+
+        display_price = f"{price_tl:,.2f} TL"
+        if item_currency != 'TL':
+            display_rate = f"{item_currency} {total_original:,.2f} / {float(rate_value):,.4f}"
+        else:
+            display_rate = "-"
+        try:
+            total_tl = Decimal(str(item.get('total_tl', qty * price_tl)))
+        except Exception:
+            total_tl = (qty * price_tl).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+        display_total = f"{total_tl:,.2f} TL"
+
         table_data.append([
             str(i),
             Paragraph(f"<font name='DejaVuSans'>{desc}</font>", styleN),
-            f"{qty:,.0f}",  # Miktar tam sayı olarak göster
+            f"{qty:,.0f}",  # Miktar tam say\u0131 olarak g\u00f6ster
             display_price,
-            f"%{vat_rate}",
+            display_rate,
             display_total,
             invoice_ref
         ])
 
-    items_table = Table(table_data, colWidths=[12*mm, 45*mm, 15*mm, 25*mm, 15*mm, 25*mm, 27*mm])
+    items_table = Table(table_data, colWidths=[12*mm, 42*mm, 14*mm, 20*mm, 30*mm, 20*mm, 30*mm])
     items_table.setStyle(TableStyle([
         ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#F8F9FA')),
         ('TEXTCOLOR', (0,0), (-1,0), colors.black),
         ('ALIGN', (0,0), (-1,-1), 'CENTER'),
-        ('ALIGN', (1,1), (1,-1), 'LEFT'),  # Açıklama sütunu sola hizalı
+        ('ALIGN', (1,1), (1,-1), 'LEFT'),  # A\u00e7\u0131klama s?tunu sola hizal?
         ('FONTNAME', (0,0), (-1,0), font_name_bold),
         ('FONTSIZE', (0,0), (-1,-1), 9),
         ('FONTNAME', (0,1), (-1,-1), font_name),
         ('GRID', (0,0), (-1,-1), 0.5, colors.black),
         ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
     ]))
-    
+
     return items_table, currency_totals
 
 def _create_totals_table(subtotal: Decimal, total_vat: Decimal, currency: str, ettn: str = None) -> Table:
@@ -644,7 +662,15 @@ def create_professional_invoice_pdf(invoice_data: Dict[str, Any], file_path: str
         elements.append(Spacer(1, 4*mm))
         
         # 4. Para Birimi Bazında Toplamlar Tablosu
-        totals_table, grand_total_tl = _create_currency_totals_table(currency_totals, vat_rate)
+        rates_used = {}
+        for item in invoice_data.get('items', []):
+            try:
+                cur = (item.get('currency', 'TL') or 'TL').strip().upper()
+                if cur != 'TL' and item.get('exchange_rate') is not None:
+                    rates_used[cur] = Decimal(str(item.get('exchange_rate')))
+            except Exception:
+                continue
+        totals_table, grand_total_tl = _create_currency_totals_table(currency_totals, vat_rate, rates_used)
         elements.append(totals_table)
         elements.append(Spacer(1, 8*mm))
 
@@ -680,10 +706,6 @@ def create_professional_invoice_pdf(invoice_data: Dict[str, Any], file_path: str
             elements.append(Paragraph(bank_info_text, styleN))
             elements.append(Spacer(1, 4*mm))
 
-        # 6. Alt Bilgiler
-        elements.append(Paragraph(f"<font size=8>ETTN: ...</font>", styleN))
-        elements.append(Paragraph(f"<b>YALNIZ:</b> ...", styleN))
-
         doc.build(elements)
         logging.info(f"Profesyonel fatura başarıyla oluşturuldu: {file_path}")
         return True
@@ -701,7 +723,6 @@ def create_merged_invoice_pdf(customer_name: str, invoices_data: List[Dict[str, 
     try:
         temp_files = []
         from utils.database import db_manager
-        import logging
         for i, invoice in enumerate(invoices_data):
             # Geçici dosya oluştur
             temp_fd, temp_path = tempfile.mkstemp(suffix=f'_fatura_{invoice.get("id")}.pdf')
@@ -823,7 +844,6 @@ def create_combined_invoice_pdf(customer_name: str, invoices_data: List[Dict[str
     """
     try:
         from utils.database import db_manager
-        import logging
         
         if not invoices_data:
             return False
@@ -2114,7 +2134,15 @@ def create_service_history_report_pdf(data: Dict[str, Any], file_path: str) -> b
         
         if service_records:
             # Tablo başlıkları
-            headers = ['Tarih', 'Müşteri', 'Cihaz Model', 'Seri No', 'Teknisyen', 'Durum', 'İşlem Açıklaması']
+            headers = [
+                "Tarih",
+                "Müşteri",
+                "Cihaz Model",
+                "Seri No",
+                "Teknisyen",
+                "Durum",
+                "Açıklama",
+            ]
             table_data = [headers]
             
             # Veri satırları

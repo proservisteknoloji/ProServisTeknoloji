@@ -7,6 +7,8 @@ from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, 
     QPushButton, QRadioButton, QButtonGroup, QFrame
 )
+import logging
+logger = logging.getLogger(__name__)
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QFont, QIcon
 
@@ -169,8 +171,8 @@ if __name__ == "__main__":
     dialog = StorageSelectionDialog()
     
     if dialog.exec():
-        print(f"Seçilen: {dialog.get_selection()}")
+        logger.info(f"Seçilen: {dialog.get_selection()}")
     else:
-        print("İptal edildi")
+        logger.info("İptal edildi")
     
     sys.exit()

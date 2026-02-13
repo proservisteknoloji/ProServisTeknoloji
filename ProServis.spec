@@ -193,9 +193,7 @@ pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 exe = EXE(
     pyz,
     a.scripts,
-    a.binaries,
-    a.zipfiles,
-    a.datas,
+    [],
     [],
     name='ProServis',
     debug=False,
@@ -211,6 +209,16 @@ exe = EXE(
     codesign_identity=None,
     entitlements_file=None,
     icon='ProServis.ico',
+    exclude_binaries=True,
 )
 
-# TEK DOSYA BUILD - COLLECT KULLANILMIYOR
+coll = COLLECT(
+    exe,
+    a.binaries,
+    a.zipfiles,
+    a.datas,
+    strip=False,
+    upx=True,
+    upx_exclude=[],
+    name='ProServis',
+)

@@ -6,11 +6,16 @@ import requests
 import xml.etree.ElementTree as ET
 from decimal import Decimal, InvalidOperation
 import logging
+import time
 
 # Logger'ı ayarla
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-def get_exchange_rates() -> dict[str, Decimal]:
+_CACHED_RATES: dict[str, Decimal] | None = None
+_CACHED_AT: float | None = None
+_CACHE_TTL_SECONDS = 300  # 5 dakika
+
+
+def get_exchange_rates(force_refresh: bool = False) -> dict[str, Decimal]:
     """
     TCMB'den güncel USD ve EUR döviz alış kurlarını çeker.
 
@@ -24,6 +29,12 @@ def get_exchange_rates() -> dict[str, Decimal]:
         ET.ParseError: XML verisi bozuksa.
         Exception: Diğer beklenmedik hatalar için.
     """
+    global _CACHED_RATES, _CACHED_AT
+
+    now = time.time()
+    if not force_refresh and _CACHED_RATES and _CACHED_AT and (now - _CACHED_AT) < _CACHE_TTL_SECONDS:
+        return _CACHED_RATES
+
     rates = {'TL': Decimal('1.0')}
     url = "https://www.tcmb.gov.tr/kurlar/today.xml"
 
@@ -51,18 +62,25 @@ def get_exchange_rates() -> dict[str, Decimal]:
         
         from datetime import datetime
         timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        logging.info(f"✓ Güncel kurlar başarıyla çekildi ({timestamp}, TCMB Tarih: {tarih}): USD={rates.get('USD', 'N/A')}, EUR={rates.get('EUR', 'N/A')}")
+        logging.info(f"OK: Guncel kurlar cekildi ({timestamp}, TCMB Tarih: {tarih}): USD={rates.get('USD', 'N/A')}, EUR={rates.get('EUR', 'N/A')}")
+        _CACHED_RATES = rates
+        _CACHED_AT = now
         return rates
 
     except (requests.exceptions.RequestException, ET.ParseError, InvalidOperation, Exception) as e:
         from datetime import datetime
         timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        logging.error(f"⚠️ Döviz kurları TCMB'den alınamadı ({timestamp}). Hata: {type(e).__name__}: {e}")
-        logging.warning(f"⚠️ VARSAYILAN KURLAR KULLANILACAK: USD=30.0, EUR=35.0 - Bu kurlar güncel olmayabilir!")
-        
-        # Hata durumunda varsayılan (yaklaşık) kurları döndür
+        logging.error(f"WARN: TCMB kurlari alinamadi ({timestamp}). Hata: {type(e).__name__}: {e}")
+        logging.warning("WARN: Varsayilan kurlar kullanilacak: USD=30.0, EUR=35.0")
+
+        # Hata durumunda varsa cache'i dondur
+        if _CACHED_RATES:
+            return _CACHED_RATES
+
+        # Hata durumunda varsay??lan (yakla????k) kurlar?? d??nd??r
         return {
             'TL': Decimal('1.0'),
             'USD': Decimal('30.0'),
             'EUR': Decimal('35.0')
         }
+

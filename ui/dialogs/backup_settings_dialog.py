@@ -5,6 +5,8 @@ import os
 import shutil
 from datetime import datetime
 from pathlib import Path
+import logging
+logger = logging.getLogger(__name__)
 
 class BackupSettingsDialog(QDialog):
     def __init__(self, db=None, settings_manager=None, parent=None):
@@ -127,7 +129,7 @@ class BackupSettingsDialog(QDialog):
         try:
             self.create_backup_internal("auto")
         except Exception as e:
-            print(f"Otomatik yedekleme hatası: {e}")
+            logger.error(f"Otomatik yedekleme hatası: {e}")
 
     def create_manual_backup(self):
         """Manuel yedekleme oluşturur"""
@@ -169,10 +171,10 @@ class BackupSettingsDialog(QDialog):
                 for old_backup in backup_files[10:]:
                     old_backup.unlink()
 
-            print(f"{backup_type.capitalize()} yedekleme oluşturuldu: {backup_path}")
+            logger.info(f"{backup_type.capitalize()} yedekleme oluşturuldu: {backup_path}")
 
         except Exception as e:
-            print(f"Yedekleme hatası: {e}")
+            logger.error(f"Yedekleme hatası: {e}")
             raise
 
     def closeEvent(self, event):

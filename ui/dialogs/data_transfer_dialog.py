@@ -2,6 +2,8 @@
 
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QGroupBox, QPushButton,
                              QFileDialog, QMessageBox)
+import logging
+logger = logging.getLogger(__name__)
 from PyQt6.QtCore import Qt
 from decimal import Decimal
 from utils.database import db_manager
@@ -181,7 +183,6 @@ class DataTransferDialog(QDialog):
 
     def _import_from_excel(self):
         """Excel veya CSV dosyasından veri içe aktarma işlemini başlatır (OPTIMIZE EDİLMİŞ)."""
-        import logging
         from datetime import datetime
         
         file_path, _ = QFileDialog.getOpenFileName(self, "Excel veya CSV Dosyası Seç", "", 
@@ -238,10 +239,10 @@ class DataTransferDialog(QDialog):
         
         # Debug: Bulunan sütunları göster
         found_info = {k: v for k, v in self.found_columns.items() if v is not None}
-        print(f"Excel'de bulunan sütunlar: {found_info}")
+        logger.info(f"Excel'de bulunan sütunlar: {found_info}")
         missing_info = {k: v for k, v in self.found_columns.items() if v is None}
         if missing_info:
-            print(f"Excel'de bulunmayan sütunlar: {list(missing_info.keys())}")
+            logger.info(f"Excel'de bulunmayan sütunlar: {list(missing_info.keys())}")
         
         required_keys = {"customer", "model", "serial"}
         if not all(self.found_columns.get(key) for key in required_keys):
@@ -253,7 +254,6 @@ class DataTransferDialog(QDialog):
     
     def _process_import_data_optimized(self, df, start_time):
         """DataFrame'i BATCH INSERT ile optimize edilmiş şekilde veritabanına aktarır."""
-        import logging
         from datetime import datetime
         from PyQt6.QtWidgets import QProgressDialog
         
@@ -492,14 +492,14 @@ class DataTransferDialog(QDialog):
 
     def _process_import_data(self, df):
         """DataFrame'i işleyerek veritabanına aktarır."""
-        print(f"_process_import_data çağrıldı, {len(df)} satır işlenecek")
+        logger.info(f"_process_import_data çağrıldı, {len(df)} satır işlenecek")
         from PyQt6.QtWidgets import QProgressDialog
         stats = {'added_c': 0, 'added_d': 0, 'skipped_d': 0, 'updated_c': 0, 'updated_d': 0}
         progress = QProgressDialog("Veriler aktarılıyor...", "İptal", 0, len(df), self)
         progress.setWindowTitle("Yükleniyor")
         progress.setWindowModality(Qt.WindowModality.ApplicationModal)
         progress.setMinimumDuration(0)
-        print(f"Toplam {len(df)} satır işlenecek")
+        logger.info(f"Toplam {len(df)} satır işlenecek")
         processed_count = 0
         progress.setValue(0)
         for i, row in enumerate(df.iterrows()):
@@ -516,7 +516,7 @@ class DataTransferDialog(QDialog):
             
             # Debug: İlk 5 satır için detaylı bilgi göster
             if i < 5:
-                print(f"Satır {i+1}: Müşteri='{cust_name}', Model='{model}', Seri='{serial}' (len={len(serial)}, boş mu={serial==' '}), Telefon='{phone}' (len={len(phone)}, boş mu={phone==' '}), TelefonSütunu={phone_col}")
+                logger.info(f"Satır {i+1}: Müşteri='{cust_name}', Model='{model}', Seri='{serial}' (len={len(serial)}, boş mu={serial==' '}), Telefon='{phone}' (len={len(phone)}, boş mu={phone==' '}), TelefonSütunu={phone_col}")
             
             # ...existing code...
             
@@ -531,23 +531,23 @@ class DataTransferDialog(QDialog):
                     skip_reason.append(f"Model boş: '{model}'")
                 
                 if i < 10:  # İlk 10 satır için atlama nedeni göster
-                    print(f"❌ Cihaz atlandı {i+1}: {' | '.join(skip_reason)} (Müşteri: {cust_name}, Model: '{model}')")
+                    logger.info(f"❌ Cihaz atlandı {i+1}: {' | '.join(skip_reason)} (Müşteri: {cust_name}, Model: '{model}')")
                 stats['skipped_d'] += 1
                     
             progress.setValue(i+1)
-        print(f"Toplam müşteri satırı: {processed_count}, Atlanan cihaz satırı: {stats['skipped_d']}")
+        logger.info(f"Toplam müşteri satırı: {processed_count}, Atlanan cihaz satırı: {stats['skipped_d']}")
         self._show_import_summary(stats)
 
     def _get_or_create_customer(self, cust_name: str, row, stats: dict) -> int | None:
         """Müşteriyi veritabanında arar, yoksa oluşturur ve ID'sini döndürür."""
         # Özel debug: 1905 müşterisi için detaylı bilgi
         if "1905" in cust_name and "KULTUR" in cust_name:
-            print(f"🔍 1905 müşteri kontrolü: '{cust_name}'")
+            logger.info(f"🔍 1905 müşteri kontrolü: '{cust_name}'")
         
         cust_data = self.db.fetch_one("SELECT id, phone, email, address, is_contract FROM customers WHERE name = ?", (cust_name,))
         
         if "1905" in cust_name and "KULTUR" in cust_name:
-            print(f"📊 Veritabanı sorgu sonucu: {cust_data}")
+            logger.info(f"📊 Veritabanı sorgu sonucu: {cust_data}")
         
         if not cust_data:
             # Müşteri tipini belirle
@@ -564,12 +564,12 @@ class DataTransferDialog(QDialog):
                 else:
                     phone_value = self._generate_random_phone()
                     if "1905" in cust_name and "KULTUR" in cust_name:
-                        print(f"📞 1905 müşteri için rastgele telefon üretildi: {phone_value}")
+                        logger.info(f"📞 1905 müşteri için rastgele telefon üretildi: {phone_value}")
             else:
                 # Telefon sütunu yoksa rastgele numara üret
                 phone_value = self._generate_random_phone()
                 if "1905" in cust_name and "KULTUR" in cust_name:
-                    print(f"📞 1905 müşteri için telefon sütunu yok, rastgele üretildi: {phone_value}")
+                    logger.info(f"📞 1905 müşteri için telefon sütunu yok, rastgele üretildi: {phone_value}")
             
             cust_params = (
                 cust_name,
@@ -587,20 +587,20 @@ class DataTransferDialog(QDialog):
                     self.db.update_customer_details(cust_id, {'is_contract': 1})
                 stats['added_c'] += 1
                 if "1905" in cust_name and "KULTUR" in cust_name:
-                    print(f"✅ 1905 MÜŞTERİ BAŞARIYLA EKLENDİ - ID: {cust_id}")
-                print(f"✓ Müşteri eklendi: {cust_name} (ID: {cust_id})")
+                    logger.info(f"✅ 1905 MÜŞTERİ BAŞARIYLA EKLENDİ - ID: {cust_id}")
+                logger.info(f"✓ Müşteri eklendi: {cust_name} (ID: {cust_id})")
                 return cust_id
             else:
                 if "1905" in cust_name and "KULTUR" in cust_name:
-                    print(f"❌ 1905 MÜŞTERİ EKLEME BAŞARISIZ")
-                print(f"✗ Müşteri eklenemedi: {cust_name}")
+                    logger.info(f"❌ 1905 MÜŞTERİ EKLEME BAŞARISIZ")
+                logger.info(f"✗ Müşteri eklenemedi: {cust_name}")
                 QMessageBox.critical(self, "Veritabanı Hatası", 
                                    f"Müşteri eklenirken hata oluştu: {cust_name}\nİçe aktarma durduruldu.")
                 return None
         else:
             cust_id, db_phone, db_email, db_address, db_is_contract = cust_data
             if "1905" in cust_name and "KULTUR" in cust_name:
-                print(f"📋 1905 MÜŞTERİ ZATEN MEVCUT - ID: {cust_id}")
+                logger.info(f"📋 1905 MÜŞTERİ ZATEN MEVCUT - ID: {cust_id}")
             update_details = {}
             if not db_phone:
                 phone_col = self.found_columns.get("phone")
@@ -645,7 +645,7 @@ class DataTransferDialog(QDialog):
         if not serial or serial.strip() == '':
             import uuid
             serial = f"AUTO_{str(uuid.uuid4())[:8].upper()}"
-            print(f"Oto seri numarası oluşturuldu: {serial} (orijinal: '{original_serial}')")
+            logger.info(f"Oto seri numarası oluşturuldu: {serial} (orijinal: '{original_serial}')")
         
         # Lokasyon bilgilerini al
         location_name = row.get(self.found_columns.get("location_name"), '').strip()
@@ -682,7 +682,7 @@ class DataTransferDialog(QDialog):
                 )
                 if loc_result:
                     location_id = loc_result
-                    print(f"Yeni lokasyon oluşturuldu: {location_name} (Müşteri: {cust_name})")
+                    logger.info(f"Yeni lokasyon oluşturuldu: {location_name} (Müşteri: {cust_name})")
         else:
             # Lokasyon adı yoksa, varsayılan lokasyonu kullan
             default_location = self.db.fetch_one(
@@ -748,33 +748,33 @@ class DataTransferDialog(QDialog):
                 result = self.db.save_customer_device(cust_id, device_data, device_id)
                 if result is not None:
                     stats['updated_d'] += 1
-                    print(f"'{serial}' seri nolu cihaz güncellendi")
+                    logger.info(f"'{serial}' seri nolu cihaz güncellendi")
                     return True
                 else:
-                    print(f"✗ Cihaz güncellenemedi: {model}")
+                    logger.info(f"✗ Cihaz güncellenemedi: {model}")
                     return False
             else:
                 # Yeni cihaz ekle
                 device_result = self.db.save_customer_device(cust_id, device_data)
                 if device_result:
                     stats['added_d'] += 1
-                    print(f"✓ Cihaz eklendi: {model} (Müşteri: {cust_name}, Seri: {serial})")
+                    logger.info(f"✓ Cihaz eklendi: {model} (Müşteri: {cust_name}, Seri: {serial})")
                     
                     # Sözleşmeli müşteri kontrolü ve otomatik toner ekleme
                     customer_contract = self.db.fetch_one("SELECT is_contract FROM customers WHERE id = ?", (cust_id,))
                     is_contract_customer = customer_contract and customer_contract['is_contract']
                     
                     if is_contract_customer:
-                        print(f"DEBUG: Sözleşmeli müşteri için '{model}' cihazının tonerleri otomatik olarak stoğa eklenecek")
+                        logger.debug(f"DEBUG: Sözleşmeli müşteri için '{model}' cihazının tonerleri otomatik olarak stoğa eklenecek")
                         self._add_device_toners_to_stock(model)
                     
                     return True
                 else:
-                    print(f"✗ Cihaz eklenemedi: {model} (Müşteri: {cust_name})")
+                    logger.info(f"✗ Cihaz eklenemedi: {model} (Müşteri: {cust_name})")
                     return False
                     
         except Exception as e:
-            print(f"'{serial}' seri nolu '{model}' cihazı (Müşteri: {cust_name}) işlenirken hata: {e}")
+            logger.error(f"'{serial}' seri nolu '{model}' cihazı (Müşteri: {cust_name}) işlenirken hata: {e}")
             return False
 
     def _generate_random_phone(self) -> str:
@@ -792,7 +792,7 @@ class DataTransferDialog(QDialog):
             missing_toners = suggest_missing_toners_for_device(device_model, self.db)
             
             if not missing_toners:
-                print(f"Cihaz {device_model} için toner bulunamadı veya zaten stokta mevcut")
+                logger.info(f"Cihaz {device_model} için toner bulunamadı veya zaten stokta mevcut")
                 return
             
             # Tonerleri stoka ekle
@@ -821,16 +821,16 @@ class DataTransferDialog(QDialog):
                             toner['color_type']
                         ))
                         added_count += 1
-                        print(f"  + {toner['toner_code']} ({toner['color_type']}) toner stoğa eklendi")
+                        logger.info(f"  + {toner['toner_code']} ({toner['color_type']}) toner stoğa eklendi")
                     
                 except Exception as e:
-                    print(f"Toner {toner['toner_code']} eklenirken hata: {e}")
+                    logger.error(f"Toner {toner['toner_code']} eklenirken hata: {e}")
             
             if added_count > 0:
-                print(f"Toplam {added_count} toner stoğa eklendi")
+                logger.info(f"Toplam {added_count} toner stoğa eklendi")
             
         except Exception as e:
-            print(f"Cihaz tonerleri eklenirken hata: {e}")
+            logger.error(f"Cihaz tonerleri eklenirken hata: {e}")
 
     def _determine_device_type(self, model: str, row) -> str:
         """Cihazın türünü (Renkli/Siyah-Beyaz) akıllıca belirler."""
@@ -984,7 +984,6 @@ class DataTransferDialog(QDialog):
     def _export_to_csv(self):
         """Tüm müşteri ve cihaz verilerini CSV dosyasına aktarır (HIZLI - pandas gerektirmez)."""
         import csv
-        import logging
         from datetime import datetime
         
         file_path, _ = QFileDialog.getSaveFileName(

@@ -7,13 +7,13 @@ finansal raporlama ile ilgili veritabanı işlemlerini eklemek için tasarlanmı
 
 import json
 import logging
+logger = logging.getLogger(__name__)
 import sqlite3
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
 from typing import List, Dict, Any, Optional, Tuple
 
 # Logging yapılandırması
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 class BillingQueriesMixin:
     """
@@ -46,15 +46,54 @@ class BillingQueriesMixin:
 
                 # Fatura toplamını ve para birimini hesapla
                 total_amount, invoice_currency = self._calculate_invoice_total(items)
+                rates = self.get_exchange_rates()
+                enriched_items = []
+                for item in items:
+                    item_currency = (item.get('currency', 'TL') or 'TL').strip().upper()
+                    unit_price = Decimal(str(item.get('unit_price', 0)))
+                    quantity = Decimal(str(item.get('quantity', 0)))
+                    rate = Decimal(str(rates.get(item_currency, 1.0))) if item_currency != 'TL' else Decimal('1')
+                    unit_price_tl = unit_price * rate
+                    total_tl = unit_price_tl * quantity
+                    enriched = dict(item)
+                    enriched['currency'] = item_currency
+                    enriched['exchange_rate'] = float(rate)
+                    enriched['unit_price_tl'] = float(unit_price_tl)
+                    enriched['total_tl'] = float(total_tl)
+                    enriched_items.append(enriched)
                 
                 invoice_date = datetime.now().strftime('%Y-%m-%d')
-                details_json = json.dumps(items, ensure_ascii=False)
+                details_json = json.dumps(enriched_items, ensure_ascii=False)
                 
                 invoice_params = (customer_id, 'Satış', customer_id, invoice_date, float(total_amount), invoice_currency, details_json)
                 cursor.execute("INSERT INTO invoices (customer_id, invoice_type, related_id, invoice_date, total_amount, currency, details_json) VALUES (?, ?, ?, ?, ?, ?, ?)", invoice_params)
                 invoice_id = cursor.lastrowid
                 if not invoice_id:
                     raise Exception("Fatura ID'si alınamadı.")
+
+                # Fatura kalemlerini kaydet
+                for item in enriched_items:
+                    stock_item_id = item.get('stock_item_id')
+                    quantity = Decimal(str(item.get('quantity', 0)))
+                    unit_price = Decimal(str(item.get('unit_price', 0)))
+                    currency = (item.get('currency', 'TL') or 'TL').strip().upper()
+                    tax_rate = Decimal(str(item.get('tax_rate', 20)))
+                    tax_amount = (quantity * unit_price) * tax_rate / Decimal('100')
+
+                    cost_at_sale = Decimal('0')
+                    if stock_item_id:
+                        row = cursor.execute("SELECT avg_cost FROM stock_items WHERE id = ?", (stock_item_id,)).fetchone()
+                        if row and row[0] is not None:
+                            cost_at_sale = Decimal(str(row[0]))
+
+                    cursor.execute(
+                        """
+                        INSERT INTO invoice_items (invoice_id, stock_item_id, description, quantity, unit_price, currency, tax_rate, tax_amount, cost_at_sale, cost_currency)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        """,
+                        (invoice_id, stock_item_id, item.get('description', ''), float(quantity), float(unit_price), currency, float(tax_rate), float(tax_amount), float(cost_at_sale), 'TL')
+                    )
+
 
                 # Stokları güncelle ve hareketleri kaydet
                 for item in items:
@@ -70,34 +109,22 @@ class BillingQueriesMixin:
             return False, f"Beklenmedik bir hata oluştu: {e}"
 
     def _calculate_invoice_total(self, items: List[Dict[str, Any]]) -> Tuple[Decimal, str]:
-        """Verilen kalemler listesinden toplam fatura tutarını ve para birimini hesaplar."""
+        """Verilen kalemler listesinden toplam fatura tutarini ve para birimini hesaplar."""
         if not items:
             return Decimal('0.00'), 'TL'
 
-        # Tüm para birimleri aynı mı kontrol et
-        first_currency = items[0].get('currency', 'TL')
-        is_multi_currency = not all(item.get('currency', 'TL') == first_currency for item in items)
-
         total_amount = Decimal('0.00')
-        
-        if is_multi_currency:
-            # Farklı para birimleri varsa, hepsini TL'ye çevir
-            rates = self.get_exchange_rates()
-            invoice_currency = 'TL'
-            for item in items:
-                rate = Decimal(str(rates.get(item.get('currency', 'TL'), 1.0)))
-                quantity = Decimal(str(item.get('quantity', 0)))
-                unit_price = Decimal(str(item.get('unit_price', 0)))
-                total_amount += (quantity * unit_price) * rate
-        else:
-            # Tek para birimi varsa, doğrudan topla
-            invoice_currency = first_currency
-            for item in items:
-                quantity = Decimal(str(item.get('quantity', 0)))
-                unit_price = Decimal(str(item.get('unit_price', 0)))
-                total_amount += quantity * unit_price
-        
-        return total_amount.quantize(Decimal('0.01')), invoice_currency
+        rates = self.get_exchange_rates()
+        for item in items:
+            item_currency = (item.get('currency', 'TL') or 'TL').strip().upper()
+            rate = Decimal(str(rates.get(item_currency, 1.0))) if item_currency != 'TL' else Decimal('1')
+            quantity = Decimal(str(item.get('quantity', 0)))
+            unit_price = Decimal(str(item.get('unit_price', 0)))
+            tax_rate = Decimal(str(item.get('tax_rate', 20)))
+            line_total = (quantity * unit_price) * (Decimal('1') + tax_rate / Decimal('100'))
+            total_amount += line_total * rate
+
+        return total_amount.quantize(Decimal('0.01')), 'TL'
 
     def _update_stock_for_sale(self, cursor: sqlite3.Cursor, item: Dict[str, Any], invoice_id: int, customer_id: int) -> None:
         """Bir satış kalemi için stokları günceller ve hareket kaydı oluşturur."""
@@ -111,13 +138,16 @@ class BillingQueriesMixin:
             raise Exception(f"'{item.get('description', 'Bilinmeyen Ürün')}' için yetersiz stok!")
         
         cursor.execute("UPDATE stock_items SET quantity = quantity - ? WHERE id = ?", (float(quantity_sold), stock_item_id))
+        new_quantity = Decimal(str(stock_info['quantity'])) - quantity_sold
         
         # Stok hareketini kaydet
         movement_date = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         notes = f"Satış Faturası No: {invoice_id}"
+        currency = (item.get('currency', 'TL') or 'TL').strip().upper()
+        unit_price = Decimal(str(item.get('unit_price', 0)))
         cursor.execute(
-            "INSERT INTO stock_movements (stock_item_id, movement_type, quantity_changed, movement_date, notes, related_invoice_id) VALUES (?, ?, ?, ?, ?, ?)",
-            (stock_item_id, 'Çıkış', -float(quantity_sold), movement_date, notes, invoice_id)
+            "INSERT INTO stock_movements (stock_item_id, movement_type, quantity_changed, quantity_after, unit_price, currency, movement_date, notes, related_invoice_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (stock_item_id, 'Çıkış', -float(quantity_sold), float(new_quantity), float(unit_price), currency, movement_date, notes, invoice_id)
         )
         
         # Eğer satılan ürün bir cihaz ise, müşteri envanterine ekle
@@ -492,18 +522,18 @@ class BillingQueriesMixin:
                 invoice_dict['items'] = items_list
 
         elif invoice_dict['invoice_type'] == 'Kopya Başı':
-            print(f"DEBUG: CPC faturası işleniyor, ID: {invoice_dict['related_id']}")
+            logger.debug(f"DEBUG: CPC faturası işleniyor, ID: {invoice_dict['related_id']}")
             cpc_details = self.fetch_one("SELECT * FROM cpc_invoices WHERE id = ?", (invoice_dict['related_id'],))
             if cpc_details:
                 invoice_dict['cpc_details'] = dict(cpc_details)
                 # CPC detaylarındaki JSON'u da ayrıştır
                 try:
                     cpc_items = json.loads(invoice_dict['cpc_details'].get('details_json', '[]'))
-                    print(f"DEBUG: JSON'dan {len(cpc_items)} kalem çıktı")
+                    logger.debug(f"DEBUG: JSON'dan {len(cpc_items)} kalem çıktı")
                     processed_items = []
                     
                     for i, item in enumerate(cpc_items):
-                        print(f"DEBUG: Ham item {i}: {item.keys()}")
+                        logger.debug(f"DEBUG: Ham item {i}: {item.keys()}")
                         # Kiralama bedeli kalemi ise
                         if item.get('is_rental', False):
                             # TL değerleri kullan
@@ -516,7 +546,7 @@ class BillingQueriesMixin:
                                 'total': total_tl,
                                 'currency': 'TL'
                             }
-                            print(f"DEBUG: Kiralama bedeli kalemi: {processed_item}")
+                            logger.debug(f"DEBUG: Kiralama bedeli kalemi: {processed_item}")
                             processed_items.append(processed_item)
                         else:
                             # Normal CPC kalemi - S/B ve renkli için ayrı kalemler oluştur
@@ -534,12 +564,12 @@ class BillingQueriesMixin:
                                 total_bw_cost_tl = round(float(item.get('total_bw_cost_tl', 0)), 2)
                                 total_color_cost_tl = round(float(item.get('total_color_cost_tl', 0)), 2)
                             except (ValueError, TypeError):
-                                print(f"DEBUG: Sayısal değer çevirme hatası, varsayılan değerler kullanılıyor")
+                                logger.debug(f"DEBUG: Sayısal değer çevirme hatası, varsayılan değerler kullanılıyor")
                                 bw_usage = color_usage = 0
                                 cpc_bw_price_tl = cpc_color_price_tl = 0
                                 total_bw_cost_tl = total_color_cost_tl = 0
                             
-                            print(f"DEBUG: CPC kalemi - Model: {model}, S/B: {bw_usage}, Renkli: {color_usage}")
+                            logger.debug(f"DEBUG: CPC kalemi - Model: {model}, S/B: {bw_usage}, Renkli: {color_usage}")
                             
                             # Siyah-beyaz kullanım kalemi
                             if bw_usage > 0:
@@ -550,7 +580,7 @@ class BillingQueriesMixin:
                                     'total': total_bw_cost_tl,
                                     'currency': 'TL'
                                 }
-                                print(f"DEBUG: S/B kalemi: {bw_item}")
+                                logger.debug(f"DEBUG: S/B kalemi: {bw_item}")
                                 processed_items.append(bw_item)
                             
                             # Renkli kullanım kalemi
@@ -562,14 +592,42 @@ class BillingQueriesMixin:
                                     'total': total_color_cost_tl,
                                     'currency': 'TL'
                                 }
-                                print(f"DEBUG: Renkli kalemi: {color_item}")
+                                logger.debug(f"DEBUG: Renkli kalemi: {color_item}")
                                 processed_items.append(color_item)
                     
-                    print(f"DEBUG: Toplam {len(processed_items)} işlenmiş kalem")
+                    logger.debug(f"DEBUG: Toplam {len(processed_items)} işlenmiş kalem")
                     invoice_dict['items'] = processed_items
                 except (json.JSONDecodeError, TypeError) as e:
-                    print(f"DEBUG: JSON ayrıştırma hatası: {e}")
+                    logger.debug(f"DEBUG: JSON ayrıştırma hatası: {e}")
                     pass # Ana 'items' zaten dolu olabilir
+
+        # Kalemlere TL kar??l?klar?n? ekle (PDF i?in)
+        try:
+            items = invoice_dict.get('items', [])
+            if isinstance(items, list) and items:
+                rates = self.get_exchange_rates()
+                for item in items:
+                    try:
+                        item_currency = (item.get('currency', 'TL') or 'TL').strip().upper()
+                        unit_price = Decimal(str(item.get('unit_price', 0)))
+                        quantity = Decimal(str(item.get('quantity', 0)))
+                        rate_value = item.get('exchange_rate')
+                        if rate_value is None:
+                            rate_value = float(rates.get(item_currency, 1.0)) if item_currency != 'TL' else 1.0
+                        rate = Decimal(str(rate_value))
+                        unit_price_tl = unit_price * rate
+                        total_tl = unit_price_tl * quantity
+                        if 'unit_price_tl' not in item:
+                            item['unit_price_tl'] = float(unit_price_tl)
+                        if 'total_tl' not in item:
+                            item['total_tl'] = float(total_tl)
+                        if 'exchange_rate' not in item:
+                            item['exchange_rate'] = float(rate)
+                    except Exception:
+                        # Sessiz ge?: mevcut alanlar bozulmas?n
+                        continue
+        except Exception:
+            pass
 
         return invoice_dict
 
@@ -637,17 +695,17 @@ class BillingQueriesMixin:
             ORDER BY cd.device_model
         """
         try:
-            print(f"DEBUG: SQL sorgusu çalıştırılıyor, customer_id: {customer_id}")
+            logger.debug(f"DEBUG: SQL sorgusu çalıştırılıyor, customer_id: {customer_id}")
             results = self.fetch_all(query, (customer_id,))
-            print(f"DEBUG: SQL sonucu: {len(results)} kayıt")
+            logger.debug(f"DEBUG: SQL sonucu: {len(results)} kayıt")
             if results:
-                print(f"DEBUG: İlk kayıt: {results[0]}")
-                print(f"DEBUG: İlk kayıt sütun sayısı: {len(results[0]) if results[0] else 0}")
+                logger.debug(f"DEBUG: İlk kayıt: {results[0]}")
+                logger.debug(f"DEBUG: İlk kayıt sütun sayısı: {len(results[0]) if results[0] else 0}")
             
             return [dict(row) for row in results]
         except Exception as e:
             import traceback
-            print(f"DEBUG: get_cpc_devices_for_customer hatası: {traceback.format_exc()}")
+            logger.debug(f"DEBUG: get_cpc_devices_for_customer hatası: {traceback.format_exc()}")
             raise
 
     def get_billable_cpc_data(self, customer_id: int, start_date: str, end_date: str) -> List[Dict[str, Any]]:
@@ -656,7 +714,7 @@ class BillingQueriesMixin:
         Bu fonksiyon, belirtilen tarih aralığındaki faturalandırılmamış sayaç okumalarını alır
         ve her biri için bir önceki okumayla (tarih aralığı dışında olabilir) arasındaki farkı bularak tüketimi hesaplar.
         """
-        print(f"DEBUG: get_billable_cpc_data çağrıldı - customer_id: {customer_id}, start_date: {start_date}, end_date: {end_date}")
+        logger.debug(f"DEBUG: get_billable_cpc_data çağrıldı - customer_id: {customer_id}, start_date: {start_date}, end_date: {end_date}")
         query = """
             WITH AllRecords AS (
                 -- Müşterinin tüm CPC cihazlarına ait tüm servis kayıtlarını al
@@ -721,17 +779,17 @@ class BillingQueriesMixin:
         """
         end_date_full = end_date + " 23:59:59"
         try:
-            print("DEBUG: SQL sorgusu çalıştırılıyor...")
+            logger.debug("DEBUG: SQL sorgusu çalıştırılıyor...")
             results = self.fetch_all(query, (customer_id, start_date, end_date_full))
-            print(f"DEBUG: SQL sonucu: {len(results)} kayıt")
+            logger.debug(f"DEBUG: SQL sonucu: {len(results)} kayıt")
             if results:
-                print(f"DEBUG: İlk kayıt sütun sayısı: {len(results[0])}")
-                print(f"DEBUG: İlk kayıt: {dict(results[0])}")
+                logger.debug(f"DEBUG: İlk kayıt sütun sayısı: {len(results[0])}")
+                logger.debug(f"DEBUG: İlk kayıt: {dict(results[0])}")
             
             return [dict(row) for row in results]
         except Exception as e:
             import traceback
-            print(f"DEBUG: get_billable_cpc_data hatası: {traceback.format_exc()}")
+            logger.debug(f"DEBUG: get_billable_cpc_data hatası: {traceback.format_exc()}")
             raise
 
     def mark_service_records_as_invoiced(self, record_ids: List[int], invoice_id: int) -> bool:
@@ -1050,6 +1108,47 @@ class BillingQueriesMixin:
                 invoice_type = invoice_info["invoice_type"]
                 related_id = invoice_info["related_id"]
                 details_json = invoice_info["details_json"]
+
+                # Stoktan d?sen ?r?nleri fatura silinince/i?ptal edilince geri al
+                try:
+                    cols = [row[1] for row in cursor.execute("PRAGMA table_info(stock_movements)").fetchall()]
+                    if 'related_invoice_id' in cols:
+                        movements = cursor.execute("SELECT stock_item_id, quantity_changed, unit_price, currency FROM stock_movements WHERE related_invoice_id = ?", (invoice_id,)).fetchall()
+                        for mv in movements:
+                            try:
+                                stock_item_id = mv["stock_item_id"]
+                                qty_changed = mv["quantity_changed"]
+                                unit_price = mv["unit_price"]
+                                currency = mv["currency"]
+                            except Exception:
+                                stock_item_id = mv[0]
+                                qty_changed = mv[1]
+                                unit_price = mv[2] if len(mv) > 2 else None
+                                currency = mv[3] if len(mv) > 3 else None
+                            if qty_changed is None:
+                                continue
+                            try:
+                                qty_changed_val = Decimal(str(qty_changed))
+                            except Exception:
+                                continue
+                            if qty_changed_val >= 0:
+                                continue
+                            restore_qty = -qty_changed_val
+                            row = cursor.execute("SELECT quantity FROM stock_items WHERE id = ?", (stock_item_id,)).fetchone()
+                            if not row:
+                                continue
+                            try:
+                                current_qty = Decimal(str(row["quantity"]))
+                            except Exception:
+                                current_qty = Decimal(str(row[0]))
+                            new_qty = current_qty + restore_qty
+                            cursor.execute("UPDATE stock_items SET quantity = ? WHERE id = ?", (float(new_qty), stock_item_id))
+                            movement_date = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                            notes = f"Fatura iptali: Stok iade (Fatura No: {invoice_id})"
+                            cursor.execute("INSERT INTO stock_movements (stock_item_id, movement_type, quantity_changed, quantity_after, unit_price, currency, movement_date, notes, related_invoice_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                                           (stock_item_id, 'Giriş', float(restore_qty), float(new_qty), unit_price, currency, movement_date, notes, invoice_id))
+                except Exception as e:
+                    logging.error(f"Fatura #{invoice_id} stok iade işlemi hatası: {e}", exc_info=True)
                 
                 # Fatura tipine gÃ¶re ilgili kayÄ±tlarÄ± tekrar faturalanmamÄ±ÅŸ olarak iÅŸaretle
                 if invoice_type == "Servis":

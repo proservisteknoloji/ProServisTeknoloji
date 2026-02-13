@@ -14,6 +14,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional, Dict, List, Any
 import logging
+logger = logging.getLogger(__name__)
 
 # Global Azure SQL Manager referansı
 _azure_manager_instance = None

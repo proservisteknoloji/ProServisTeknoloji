@@ -19,10 +19,9 @@ from .queries_service import ServiceQueriesMixin
 from .queries_stock import StockQueriesMixin
 from .queries_billing import BillingQueriesMixin
 # Logging yapılandırması
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 # --- VERİTABANI ŞEMA TANIMLARI ---
 # Her sürümde yapılacak değişiklikleri burada tanımla
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 9
 TABLE_DEFINITIONS: Dict[str, str] = {
     "users": "CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT NOT NULL UNIQUE, password_hash TEXT NOT NULL, role TEXT DEFAULT 'user')",
     "settings": "CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)",
@@ -37,7 +36,7 @@ TABLE_DEFINITIONS: Dict[str, str] = {
         created_date TEXT DEFAULT (datetime('now', 'localtime')),
         updated_date TEXT DEFAULT (datetime('now', 'localtime'))
     )""",
-    "customers": "CREATE TABLE IF NOT EXISTS customers (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL UNIQUE, phone TEXT, email TEXT, address TEXT, tax_id TEXT, tax_office TEXT, is_contract INTEGER DEFAULT 0, contract_start_date TEXT, contract_end_date TEXT)",
+    "customers": "CREATE TABLE IF NOT EXISTS customers (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL UNIQUE, phone TEXT, email TEXT, address TEXT, tax_id TEXT, tax_office TEXT, is_contract INTEGER DEFAULT 0, contract_start_date TEXT, contract_end_date TEXT, contract_pdf_path TEXT, contract_period TEXT DEFAULT 'Aylik', contract_price DECIMAL(12,4) DEFAULT 0, contract_currency VARCHAR(3) DEFAULT 'TL')",
     "customer_locations": """CREATE TABLE IF NOT EXISTS customer_locations (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         customer_id INTEGER NOT NULL,
@@ -60,6 +59,8 @@ TABLE_DEFINITIONS: Dict[str, str] = {
         cpc_color_price REAL DEFAULT 0.0, 
         cpc_bw_currency TEXT DEFAULT 'TL', 
         cpc_color_currency TEXT DEFAULT 'TL', 
+        rental_fee DECIMAL(10,4) DEFAULT 0,
+        rental_currency VARCHAR(3) DEFAULT 'TL',
         color_type TEXT DEFAULT 'Siyah-Beyaz',
         FOREIGN KEY (customer_id) REFERENCES customers (id) ON DELETE CASCADE
     )""",
@@ -70,12 +71,18 @@ TABLE_DEFINITIONS: Dict[str, str] = {
         brand TEXT DEFAULT 'Kyocera',
         device_model TEXT NOT NULL,
         serial_number TEXT NOT NULL,
-        device_type TEXT DEFAULT 'Yazıcı',
+        device_type TEXT DEFAULT 'Yaz??c??',
         color_type TEXT DEFAULT 'Siyah-Beyaz',
         installation_date TEXT,
         notes TEXT,
         is_cpc INTEGER DEFAULT 0,
         is_free INTEGER DEFAULT 0,
+        rental_fee DECIMAL(10,4) DEFAULT 0,
+        rental_currency VARCHAR(3) DEFAULT 'TL',
+        cpc_bw_price DECIMAL(10,4) DEFAULT 0,
+        cpc_bw_currency VARCHAR(3) DEFAULT 'TL',
+        cpc_color_price DECIMAL(10,4) DEFAULT 0,
+        cpc_color_currency VARCHAR(3) DEFAULT 'TL',
         created_at TEXT DEFAULT (datetime('now', 'localtime')),
         updated_at TEXT DEFAULT (datetime('now', 'localtime')),
         FOREIGN KEY (customer_id) REFERENCES customers (id) ON DELETE CASCADE,
@@ -87,15 +94,19 @@ TABLE_DEFINITIONS: Dict[str, str] = {
         device_id INTEGER,
         location_id INTEGER,
         assigned_user_id INTEGER,
+        technician_id INTEGER,
         problem_description TEXT,
         notes TEXT,
         created_date TEXT,
+        completed_date TEXT,
         bw_counter INTEGER,
         color_counter INTEGER,
         status TEXT,
         is_invoiced INTEGER DEFAULT 0,
         related_invoice_id INTEGER,
         description TEXT,
+        technician_report TEXT,
+        service_form_pdf_path TEXT,
         FOREIGN KEY (device_id) REFERENCES customer_devices (id) ON DELETE CASCADE,
         FOREIGN KEY (location_id) REFERENCES customer_locations (id) ON DELETE CASCADE,
         FOREIGN KEY (assigned_user_id) REFERENCES users (id) ON DELETE SET NULL
@@ -135,6 +146,10 @@ TABLE_DEFINITIONS: Dict[str, str] = {
         sale_price REAL, 
         sale_currency TEXT, 
         supplier TEXT,
+        location TEXT,
+        min_stock_level INTEGER DEFAULT 0,
+        avg_cost REAL DEFAULT 0.0,
+        avg_cost_currency TEXT DEFAULT 'TL',
         is_consignment INTEGER DEFAULT 0
     )""",
     "stock_movements": """CREATE TABLE IF NOT EXISTS stock_movements (
@@ -142,6 +157,9 @@ TABLE_DEFINITIONS: Dict[str, str] = {
         stock_item_id INTEGER NOT NULL, 
         movement_type TEXT NOT NULL, 
         quantity_changed INTEGER NOT NULL, 
+        quantity_after REAL, 
+        unit_price REAL, 
+        currency TEXT, 
         movement_date TEXT NOT NULL, 
         related_invoice_id INTEGER, 
         related_service_id INTEGER, 
@@ -156,9 +174,11 @@ TABLE_DEFINITIONS: Dict[str, str] = {
         invoice_date TEXT NOT NULL, 
         total_amount REAL NOT NULL, 
         paid_amount REAL DEFAULT 0.0, 
-        status TEXT DEFAULT 'Ödenmedi', 
+        status TEXT DEFAULT '??denmedi', 
         currency TEXT NOT NULL, 
         details_json TEXT, 
+        items_json TEXT,
+        exchange_rate REAL DEFAULT 1.0,
         notes TEXT,
         FOREIGN KEY (customer_id) REFERENCES customers (id) ON DELETE CASCADE
     )""",
@@ -171,6 +191,133 @@ TABLE_DEFINITIONS: Dict[str, str] = {
         notes TEXT, 
         FOREIGN KEY (invoice_id) REFERENCES invoices (id) ON DELETE CASCADE
     )""",
+    "suppliers": """CREATE TABLE IF NOT EXISTS suppliers (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL UNIQUE,
+        phone TEXT,
+        email TEXT,
+        address TEXT,
+        tax_office TEXT,
+        tax_number TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )""",
+    "purchase_invoices": """CREATE TABLE IF NOT EXISTS purchase_invoices (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        supplier_id INTEGER,
+        invoice_no TEXT,
+        invoice_date TEXT NOT NULL,
+        currency VARCHAR(3) DEFAULT 'TL',
+        exchange_rate REAL DEFAULT 1.0,
+        subtotal REAL DEFAULT 0,
+        tax_total REAL DEFAULT 0,
+        total REAL DEFAULT 0,
+        notes TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (supplier_id) REFERENCES suppliers(id)
+    )""",
+    "purchase_items": """CREATE TABLE IF NOT EXISTS purchase_items (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        purchase_invoice_id INTEGER NOT NULL,
+        stock_item_id INTEGER NOT NULL,
+        description TEXT,
+        quantity DECIMAL(10,2) NOT NULL,
+        unit_price DECIMAL(12,4) NOT NULL,
+        currency VARCHAR(3) DEFAULT 'TL',
+        tax_rate REAL DEFAULT 0,
+        tax_amount REAL DEFAULT 0,
+        total REAL DEFAULT 0,
+        unit_cost_tl REAL DEFAULT 0,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (purchase_invoice_id) REFERENCES purchase_invoices(id),
+        FOREIGN KEY (stock_item_id) REFERENCES stock_items(id)
+    )""",
+    "stock_price_history": """CREATE TABLE IF NOT EXISTS stock_price_history (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        stock_item_id INTEGER NOT NULL,
+        price_type TEXT NOT NULL,
+        price REAL NOT NULL,
+        currency VARCHAR(3) DEFAULT 'TL',
+        source TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (stock_item_id) REFERENCES stock_items(id)
+    )""",
+    "price_settings": """CREATE TABLE IF NOT EXISTS price_settings (
+        id INTEGER PRIMARY KEY,
+        settings_json TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )""",
+    "custom_price_margins": """CREATE TABLE IF NOT EXISTS custom_price_margins (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        stock_item_id INTEGER NOT NULL,
+        custom_margin DECIMAL(5,2) NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (stock_item_id) REFERENCES stock_items(id),
+        UNIQUE(stock_item_id)
+    )""",
+    "company_info": """CREATE TABLE IF NOT EXISTS company_info (
+        id INTEGER PRIMARY KEY,
+        company_name TEXT,
+        tax_office TEXT,
+        tax_number TEXT,
+        address TEXT,
+        phone TEXT,
+        email TEXT,
+        logo_path TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )""",
+    "invoice_items": """CREATE TABLE IF NOT EXISTS invoice_items (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        invoice_id INTEGER NOT NULL,
+        stock_item_id INTEGER,
+        description TEXT NOT NULL,
+        quantity DECIMAL(10,2) DEFAULT 1,
+        unit_price DECIMAL(12,4) NOT NULL,
+        currency VARCHAR(3) DEFAULT 'TL',
+        tax_rate REAL DEFAULT 0,
+        tax_amount REAL DEFAULT 0,
+        cost_at_sale REAL DEFAULT 0,
+        cost_currency VARCHAR(3) DEFAULT 'TL',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (invoice_id) REFERENCES invoices(id)
+    )""",
+    "cpc_stock_items": """CREATE TABLE IF NOT EXISTS cpc_stock_items (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        device_id INTEGER NOT NULL,
+        toner_code VARCHAR(50) NOT NULL,
+        toner_name VARCHAR(100),
+        color VARCHAR(20),
+        quantity INTEGER DEFAULT 0,
+        min_quantity INTEGER DEFAULT 5,
+        location VARCHAR(100),
+        notes TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (device_id) REFERENCES customer_devices(id)
+    )""",
+    "cpc_device_counters": """CREATE TABLE IF NOT EXISTS cpc_device_counters (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        device_id INTEGER NOT NULL,
+        bw_counter INTEGER DEFAULT 0,
+        color_counter INTEGER DEFAULT 0,
+        last_update TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (device_id) REFERENCES customer_devices(id)
+    )""",
+    "cpc_usage_history": """CREATE TABLE IF NOT EXISTS cpc_usage_history (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        device_id INTEGER NOT NULL,
+        toner_id INTEGER NOT NULL,
+        usage_date DATE NOT NULL,
+        bw_pages INTEGER DEFAULT 0,
+        color_pages INTEGER DEFAULT 0,
+        notes TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (device_id) REFERENCES customer_devices(id),
+        FOREIGN KEY (toner_id) REFERENCES cpc_stock_items(id)
+    )""",
     "pending_sales": """CREATE TABLE IF NOT EXISTS pending_sales (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         customer_id INTEGER NOT NULL,
@@ -178,6 +325,8 @@ TABLE_DEFINITIONS: Dict[str, str] = {
         total_amount REAL NOT NULL,
         currency TEXT NOT NULL DEFAULT 'TRY',
         items_json TEXT NOT NULL,
+        sale_data_json TEXT,
+        invoice_id INTEGER,
         status TEXT NOT NULL DEFAULT 'pending',
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (customer_id) REFERENCES customers (id) ON DELETE CASCADE
@@ -349,6 +498,28 @@ class DatabaseManager(GeneralQueriesMixin, ServiceQueriesMixin, StockQueriesMixi
         except sqlite3.Error as e:
             logging.error(f"Fetch all hatası: {e}\nSorgu: {query}\nParametreler: {params}", exc_info=True)
             return []
+    def _get_user_version(self) -> int:
+        """Veritaban?? user_version de??erini d??nd??r??r."""
+        conn = self.get_connection()
+        if not conn:
+            return 0
+        try:
+            row = conn.execute("PRAGMA user_version").fetchone()
+            return int(row[0]) if row else 0
+        except Exception as e:
+            logging.error(f"user_version okunamad??: {e}")
+            return 0
+    def _set_user_version(self, version: int) -> None:
+        """Veritaban?? user_version de??erini g??nceller."""
+        conn = self.get_connection()
+        if not conn:
+            return
+        try:
+            conn.execute(f"PRAGMA user_version = {int(version)}")
+            conn.commit()
+        except Exception as e:
+            logging.error(f"user_version ayarlanamad??: {e}")
+
     def _setup_database(self) -> None:
         """Veritabanı tablolarını ve ilk verileri kurar/günceller."""
         self._run_migrations()
@@ -357,11 +528,24 @@ class DatabaseManager(GeneralQueriesMixin, ServiceQueriesMixin, StockQueriesMixi
         """Veritabanı şemasını oluşturur ve güncellemeleri uygular."""
         conn = self.get_connection()
         if not conn: return
+
+        current_version = self._get_user_version()
+        if current_version >= SCHEMA_VERSION:
+            return
         
         # Tabloları oluştur
         for table, query in TABLE_DEFINITIONS.items():
             self.execute_query(query)
         
+        # Varsay??lan price_settings kayd??
+        try:
+            row = self.fetch_one("SELECT COUNT(*) FROM price_settings")
+            if row and row[0] == 0:
+                default_settings = '{"default_margin": 20.0, "currency": "TL", "tax_rate": 18.0}'
+                self.execute_query("INSERT INTO price_settings (id, settings_json) VALUES (1, ?)", (default_settings,))
+        except Exception as e:
+            logging.warning(f"price_settings varsay??lan kayd?? eklenemedi: {e}")
+
         # --- STOK UYUMLULUK SÜTUNU (YENİ EKLENEN) ---
         self._add_column_if_not_exists('stock_items', 'compatible_models', 'TEXT')
         # --------------------------------------------
@@ -372,16 +556,38 @@ class DatabaseManager(GeneralQueriesMixin, ServiceQueriesMixin, StockQueriesMixi
         self._add_column_if_not_exists('customers', 'is_contract', 'INTEGER DEFAULT 0')
         self._add_column_if_not_exists('customers', 'contract_start_date', 'TEXT')
         self._add_column_if_not_exists('customers', 'contract_end_date', 'TEXT')
+        self._add_column_if_not_exists('customers', 'contract_pdf_path', 'TEXT')
+        self._add_column_if_not_exists('customers', 'contract_period', "TEXT DEFAULT 'Aylik'")
+        self._add_column_if_not_exists('customers', 'contract_price', 'REAL DEFAULT 0.0')
+        self._add_column_if_not_exists('customers', 'contract_currency', "TEXT DEFAULT 'TL'")
         self._add_column_if_not_exists('quote_items', 'total_tl', 'REAL DEFAULT 0.0')
         self._add_column_if_not_exists('stock_items', 'supplier', 'TEXT')
+        self._add_column_if_not_exists('stock_items', 'location', 'TEXT')
+        self._add_column_if_not_exists('stock_items', 'min_stock_level', 'INTEGER DEFAULT 0')
         self._add_column_if_not_exists('stock_items', 'color_type', "TEXT DEFAULT 'Siyah-Beyaz'")
         self._add_column_if_not_exists('devices', 'color_type', "TEXT DEFAULT 'Siyah-Beyaz'")
+        self._add_column_if_not_exists('devices', 'rental_fee', 'REAL DEFAULT 0.0')
+        self._add_column_if_not_exists('devices', 'rental_currency', "TEXT DEFAULT 'TL'")
         self._add_column_if_not_exists('devices', 'stock_id', 'INTEGER')
         self._add_column_if_not_exists('service_records', 'related_invoice_id', 'INTEGER')
         self._add_column_if_not_exists('service_records', 'description', 'TEXT')
+        self._add_column_if_not_exists('service_records', 'technician_id', 'INTEGER')
+        self._add_column_if_not_exists('service_records', 'assigned_user_id', 'INTEGER')
+        self._add_column_if_not_exists('service_records', 'completed_date', 'TEXT')
+        self._add_column_if_not_exists('service_records', 'technician_report', 'TEXT')
+        self._add_column_if_not_exists('service_records', 'service_form_pdf_path', 'TEXT')
         self._add_column_if_not_exists('invoices', 'notes', 'TEXT')
         self._add_column_if_not_exists('invoices', 'related_id', 'INTEGER')
+        self._add_column_if_not_exists('invoices', 'items_json', 'TEXT')
+        self._add_column_if_not_exists('invoices', 'exchange_rate', 'REAL DEFAULT 1.0')
+        self._add_column_if_not_exists('invoice_items', 'stock_item_id', 'INTEGER')
+        self._add_column_if_not_exists('invoice_items', 'tax_rate', 'REAL DEFAULT 0')
+        self._add_column_if_not_exists('invoice_items', 'tax_amount', 'REAL DEFAULT 0')
+        self._add_column_if_not_exists('invoice_items', 'cost_at_sale', 'REAL DEFAULT 0')
+        self._add_column_if_not_exists('invoice_items', 'cost_currency', "TEXT DEFAULT 'TL'")
         self._add_column_if_not_exists('cpc_invoices', 'is_invoiced', 'INTEGER DEFAULT 0')
+        self._add_column_if_not_exists('pending_sales', 'sale_data_json', 'TEXT')
+        self._add_column_if_not_exists('pending_sales', 'invoice_id', 'INTEGER')
         
         # Customer devices location and free columns
         self._add_column_if_not_exists('customer_devices', 'location_id', 'INTEGER')
@@ -412,6 +618,50 @@ class DatabaseManager(GeneralQueriesMixin, ServiceQueriesMixin, StockQueriesMixi
         if self._table_exists('CpcFaturalari') and not self._table_exists('cpc_invoices'):
             self.execute_query("ALTER TABLE CpcFaturalari RENAME TO cpc_invoices")
             logging.info("Tablo 'CpcFaturalari' -> 'cpc_invoices' olarak yeniden adlandırıldı.")
+
+        if not self._create_performance_indexes():
+            logging.warning('Index olusturma basarisiz - performans dusuk olabilir')
+
+        self._set_user_version(SCHEMA_VERSION)
+
+    def _create_performance_indexes(self) -> bool:
+        """Performans icin index olusturur."""
+        try:
+            conn = self.get_connection()
+            if not conn:
+                return False
+            cursor = conn.cursor()
+
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_customers_name 
+                ON customers(name)
+            """)
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_devices_serial 
+                ON devices(serial_number)
+            """)
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_devices_customer 
+                ON devices(customer_id)
+            """)
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_customer_devices_serial 
+                ON customer_devices(serial_number)
+            """)
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_customer_devices_customer 
+                ON customer_devices(customer_id)
+            """)
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_service_device 
+                ON service_records(device_id)
+            """)
+
+            conn.commit()
+            return True
+        except Exception as e:
+            logging.error(f"Index olusturma hatasi: {e}")
+            return False
 
     def _table_exists(self, table_name: str) -> bool:
         """Bir tablonun veritabanında olup olmadığını kontrol eder."""

@@ -7,6 +7,7 @@ bildirimleri için dinamik HTML e-postaları üretir.
 import os
 import base64
 import logging
+logger = logging.getLogger(__name__)
 from datetime import datetime
 from decimal import Decimal
 
@@ -20,7 +21,7 @@ def _get_logo_html(logo_path: str) -> str:
         mime_type = "image/png" if logo_path.lower().endswith(".png") else "image/jpeg"
         return f'<img src="data:{mime_type};base64,{encoded_string}" alt="Firma Logosu" style="max-width: 200px; height: auto;">'
     except Exception as e:
-        print(f"HTML için logo oluşturulurken hata: {e}")
+        logger.error(f"HTML için logo oluşturulurken hata: {e}")
         return ""
 
 def _get_base_html_style() -> str:

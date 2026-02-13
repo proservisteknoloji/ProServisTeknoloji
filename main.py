@@ -4,6 +4,7 @@ from pathlib import Path
 from PyQt6.QtWidgets import QApplication, QMessageBox
 from datetime import datetime
 from dotenv import load_dotenv
+from time import perf_counter
 
 # .env dosyasını yükle (varsayılan SMTP ayarları için)
 load_dotenv()
@@ -45,7 +46,11 @@ def handle_exception(exc_type, exc_value, exc_traceback):
         return
     import traceback
     error_msg = ''.join(traceback.format_exception(exc_type, exc_value, exc_traceback))
-    print(f"GLOBAL EXCEPTION: {error_msg}")
+    try:
+        import logging
+        logging.getLogger('global').error(f"GLOBAL EXCEPTION: {error_msg}")
+    except Exception:
+        pass
 
 sys.excepthook = handle_exception
 
@@ -53,6 +58,13 @@ project_root = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, project_root)
 
 PROSERVIS_DATA_DIR = setup_program_directories()
+
+from utils.logging_config import setup_logging
+
+setup_logging(Path(PROSERVIS_DATA_DIR) / 'logs', os.getenv('PROSERVIS_LOG_LEVEL', 'INFO'))
+
+import logging
+logger = logging.getLogger(__name__)
 
 from utils.config import STYLESHEET
 from utils.settings_manager import load_app_config, save_app_config
@@ -62,8 +74,13 @@ from utils.database import db_manager
 from utils.setup import check_first_run, check_license
 
 def main():
+    perf_enabled = os.getenv("PROSERVIS_PERF_LOG") == "1"
+    t0 = perf_counter()
+
     app = QApplication(sys.argv)
     app.setStyleSheet(STYLESHEET)
+    if perf_enabled:
+        logger.info(f"[PERF] QApplication init: {(perf_counter() - t0) * 1000:.1f} ms")
     
     first_run_success, first_user_info, is_existing_user = check_first_run()
     if not first_run_success:
@@ -71,6 +88,8 @@ def main():
     if not is_existing_user:
         if not check_license():
             sys.exit(0)
+    if perf_enabled:
+        logger.info(f"[PERF] First-run/license: {(perf_counter() - t0) * 1000:.1f} ms")
             
     try:
         if not db_manager.get_connection():
@@ -78,15 +97,11 @@ def main():
     except Exception as e:
         QMessageBox.critical(None, "Veritabanı Hatası", f"Veritabanı yüklenemedi:\n{str(e)}")
         sys.exit(1)
+
+    if perf_enabled:
+        logger.info(f"[PERF] DB connect/migrations: {(perf_counter() - t0) * 1000:.1f} ms")
         
-    try:
-        from utils.database_migration import DatabaseMigration
-        migration = DatabaseMigration(db_manager)
-        migration.run_full_migration()
-    except Exception as e:
-        QMessageBox.critical(None, "Migration Hatası", f"Database migration başarısız!\n{str(e)}")
-        sys.exit(1)
-        
+
     logged_in_user = ""
     logged_in_role = ""
     if first_user_info:
@@ -104,6 +119,8 @@ def main():
     window.show()
     window.raise_()
     window.activateWindow()
+    if perf_enabled:
+        logger.info(f"[PERF] Main window show: {(perf_counter() - t0) * 1000:.1f} ms")
     sys.exit(app.exec())
 
 if __name__ == '__main__':

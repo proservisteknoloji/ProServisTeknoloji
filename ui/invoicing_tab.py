@@ -6,6 +6,8 @@ import os
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLineEdit, QPushButton, 
                              QTableWidget, QTableWidgetItem, QHeaderView, QSplitter,
                              QLabel, QGroupBox, QMessageBox, QAbstractItemView, QFileDialog, QTabWidget)
+import logging
+logger = logging.getLogger(__name__)
 from PyQt6.QtCore import Qt, pyqtSignal as Signal
 
 from utils.database import db_manager
@@ -421,9 +423,9 @@ class InvoicingTab(QWidget):
                 QMessageBox.critical(self, "Hata", "Fatura yazdırma verileri alınamadı.")
                 return
             
-            print(f"DEBUG: PDF data items count: {len(pdf_data.get('items', []))}")
+            logger.debug(f"DEBUG: PDF data items count: {len(pdf_data.get('items', []))}")
             for i, item in enumerate(pdf_data.get('items', [])):
-                print(f"DEBUG: Item {i}: {item}")
+                logger.debug(f"DEBUG: Item {i}: {item}")
             
             # Firma ve müşteri bilgileri eksikse ayarlardan doldur
             if not pdf_data.get('company_info'):
@@ -432,7 +434,7 @@ class InvoicingTab(QWidget):
                     'address': self.db.get_setting('company_address', 'Adres Bilgisi Yok'),
                     'phone': self.db.get_setting('company_phone', 'Telefon Bilgisi Yok'),
                     'tax_office': self.db.get_setting('company_tax_office', ''),
-                    'tax_id': self.db.get_setting('company_tax_id', ''),
+                    'tax_id': self.db.get_setting('company_tax_id', '') or self.db.get_setting('company_tax_number', ''),
                     'email': self.db.get_setting('company_email', ''),
                     'bank_name': self.db.get_setting('company_bank_name', ''),
                     'bank_account_holder': self.db.get_setting('company_bank_account_holder', ''),
@@ -466,7 +468,6 @@ class InvoicingTab(QWidget):
 
     def merge_and_export_invoices(self):
         """Seçili faturaları tek bir PDF'te birleştirir."""
-        import logging
         selected_items = self.invoices_table.selectedItems()
         if not selected_items:
             QMessageBox.warning(self, "Seçim Yapılmadı", "Lütfen birleştirmek için en az bir fatura seçin.")
@@ -499,7 +500,6 @@ class InvoicingTab(QWidget):
 
     def combine_selected_invoices(self):
         """Seçili faturaları tek bir fatura içerisinde birleştirir."""
-        import logging
         from utils.pdf_generator import create_combined_invoice_pdf
         
         selected_items = self.invoices_table.selectedItems()
@@ -658,7 +658,6 @@ class InvoicingTab(QWidget):
                                 items.extend(data['consumables'])
                         
                 except json.JSONDecodeError as json_error:
-                    import logging
                     logging.error(f"JSON parse hatası: {json_error}")
                     logging.error(f"Problematik JSON: '{items_json}'")
                     QMessageBox.critical(self, "JSON Hatası", f"Satış verisi geçersiz JSON formatında:\n{json_error}\n\nVeri: {items_json}")
@@ -713,7 +712,7 @@ class InvoicingTab(QWidget):
         except Exception as e:
             QMessageBox.critical(self, "Detay Hatası", f"Satış detayları gösterilirken hata: {e}")
             import traceback
-            print(f"Detay hatası: {traceback.format_exc()}")
+            logger.error(f"Detay hatası: {traceback.format_exc()}")
 
     def delete_pending_sale(self):
         """Beklemede olan satışı sil."""
@@ -938,4 +937,4 @@ class InvoicingTab(QWidget):
         except Exception as e:
             QMessageBox.critical(self, "Rapor Hatası", f"Rapor oluşturulurken hata: {e}")
             import traceback
-            print(f"Rapor hatası: {traceback.format_exc()}")
+            logger.error(f"Rapor hatası: {traceback.format_exc()}")

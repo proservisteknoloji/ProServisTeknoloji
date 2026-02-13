@@ -7,13 +7,13 @@ Azure SQL Server ile merkezi veritabanı yönetimi
 
 import pyodbc
 import logging
+logger = logging.getLogger(__name__)
 from pathlib import Path
 from typing import Optional, Dict, Any, List
 import json
 from cryptography.fernet import Fernet
 from datetime import datetime
 
-logger = logging.getLogger(__name__)
 
 
 class AzureSQLManager:
@@ -1048,4 +1048,4 @@ if __name__ == '__main__':
     #     companies = manager.list_companies()
     #     print(f"Firmalar: {companies}")
     
-    print("Azure SQL Manager hazır")
+    logger.info("Azure SQL Manager hazır")

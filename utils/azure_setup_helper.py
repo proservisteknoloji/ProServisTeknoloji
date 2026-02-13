@@ -5,9 +5,9 @@ Azure SQL bağlantısı için gerekli ODBC driver kontrolü ve kurulum yardımc�
 
 import pyodbc
 import logging
+logger = logging.getLogger(__name__)
 import webbrowser
 
-logger = logging.getLogger(__name__)
 
 
 def check_odbc_driver():
@@ -61,43 +61,43 @@ def get_connection_string_template(driver_name='ODBC Driver 17 for SQL Server'):
 
 def show_setup_instructions():
     """Kurulum talimatlarını göster"""
-    print("\n" + "="*70)
-    print("🔧 AZURE SQL ODBC DRIVER KURULUMU")
-    print("="*70)
+    logger.info("\n" + "="*70)
+    logger.info("🔧 AZURE SQL ODBC DRIVER KURULUMU")
+    logger.info("="*70)
     
     has_driver, drivers = check_odbc_driver()
     
     if has_driver:
-        print("\n✅ Modern ODBC Driver bulundu!")
-        print("   Azure SQL bağlantısı yapılabilir.")
+        logger.info("\n✅ Modern ODBC Driver bulundu!")
+        logger.info("   Azure SQL bağlantısı yapılabilir.")
     else:
-        print("\n⚠️ Modern ODBC Driver bulunamadı!")
-        print("\n📥 Kurulum Adımları:")
-        print("1. Microsoft ODBC Driver 18 for SQL Server'ı indirin")
-        print(f"   URL: {get_download_url()}")
-        print("2. İndirilen .msi dosyasını çalıştırın")
-        print("3. Kurulum tamamlandıktan sonra sistemi yeniden başlatın")
-        print("4. ProServis'i tekrar çalıştırın")
+        logger.info("\n⚠️ Modern ODBC Driver bulunamadı!")
+        logger.info("\n📥 Kurulum Adımları:")
+        logger.info("1. Microsoft ODBC Driver 18 for SQL Server'ı indirin")
+        logger.info(f"   URL: {get_download_url()}")
+        logger.info("2. İndirilen .msi dosyasını çalıştırın")
+        logger.info("3. Kurulum tamamlandıktan sonra sistemi yeniden başlatın")
+        logger.info("4. ProServis'i tekrar çalıştırın")
         
-        print("\n🌐 İndirme sayfasını açmak ister misiniz? (E/H): ", end='')
+        logger.warning("\n🌐 İndirme sayfasını açmak ister misiniz? (E/H): ", end='')
         choice = input().strip().upper()
         
         if choice == 'E':
             open_download_page()
-            print("✅ Tarayıcıda açıldı")
+            logger.info("✅ Tarayıcıda açıldı")
     
-    print("\n" + "="*70)
-    print("📋 Mevcut ODBC Driver'lar:")
-    print("="*70)
+    logger.info("\n" + "="*70)
+    logger.info("📋 Mevcut ODBC Driver'lar:")
+    logger.info("="*70)
     for driver in drivers:
         marker = "✅" if any(x in driver for x in ['17', '18', '13']) else "  "
-        print(f"{marker} {driver}")
+        logger.info(f"{marker} {driver}")
     
-    print("\n" + "="*70)
-    print("🔗 Connection String Template:")
-    print("="*70)
-    print(get_connection_string_template())
-    print("="*70 + "\n")
+    logger.info("\n" + "="*70)
+    logger.info("🔗 Connection String Template:")
+    logger.info("="*70)
+    logger.info(get_connection_string_template())
+    logger.info("="*70 + "\n")
 
 
 if __name__ == '__main__':

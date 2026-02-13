@@ -13,7 +13,6 @@ import logging
 from typing import Dict, Any, Optional
 
 # Logging yapılandırması
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 class SettingsManager:
     """

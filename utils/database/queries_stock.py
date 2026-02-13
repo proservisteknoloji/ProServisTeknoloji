@@ -17,7 +17,7 @@ from decimal import Decimal
 from typing import List, Dict, Any, Optional, Union
 
 # Logging yapılandırması
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 class StockQueriesMixin:
     """
@@ -60,10 +60,76 @@ class StockQueriesMixin:
 
     def get_stock_movements(self, item_id: int) -> List[Dict[str, Any]]:
         """
-        Belirli bir stok kalemine ait tüm stok hareketlerini listeler.
+        Belirli bir stok kalemine ait t??m stok hareketlerini listeler.
         """
-        query = "SELECT movement_date, movement_type, quantity_changed, notes FROM stock_movements WHERE stock_item_id = ? ORDER BY movement_date DESC"
-        return [dict(row) for row in self.fetch_all(query, (item_id,))]
+        try:
+            cols = [row[1] for row in self.fetch_all("PRAGMA table_info(stock_movements)")]
+            if 'quantity_after' not in cols:
+                self.execute_query("ALTER TABLE stock_movements ADD COLUMN quantity_after REAL")
+                cols.append('quantity_after')
+            if 'unit_price' not in cols:
+                self.execute_query("ALTER TABLE stock_movements ADD COLUMN unit_price REAL")
+                cols.append('unit_price')
+            if 'currency' not in cols:
+                self.execute_query("ALTER TABLE stock_movements ADD COLUMN currency TEXT")
+                cols.append('currency')
+        except Exception:
+            cols = []
+
+        if 'quantity_after' in cols and 'unit_price' in cols and 'currency' in cols:
+            query = "SELECT movement_date, movement_type, quantity_changed, quantity_after, unit_price, currency, notes FROM stock_movements WHERE stock_item_id = ? ORDER BY movement_date DESC"
+        else:
+            query = "SELECT movement_date, movement_type, quantity_changed, notes FROM stock_movements WHERE stock_item_id = ? ORDER BY movement_date DESC"
+
+        movements = [dict(row) for row in self.fetch_all(query, (item_id,))]
+
+        # Backfill display values if missing (legacy movements)
+        try:
+            stock_row = self.fetch_one("SELECT purchase_price, purchase_currency, sale_price, sale_currency FROM stock_items WHERE id = ?", (item_id,))
+            if stock_row:
+                purchase_price = float(stock_row[0]) if stock_row[0] is not None else 0.0
+                purchase_currency = stock_row[1] or 'TL'
+                sale_price = float(stock_row[2]) if stock_row[2] is not None else 0.0
+                sale_currency = stock_row[3] or 'TL'
+            else:
+                purchase_price = 0.0
+                purchase_currency = 'TL'
+                sale_price = 0.0
+                sale_currency = 'TL'
+        except Exception:
+            purchase_price = 0.0
+            purchase_currency = 'TL'
+            sale_price = 0.0
+            sale_currency = 'TL'
+
+        for mv in movements:
+            if 'unit_price' not in mv or mv.get('unit_price') in (None, 0, ''):
+                movement_type = (mv.get('movement_type') or '')
+                movement_type_lower = movement_type.lower()
+                quantity_changed = mv.get('quantity_changed', 0)
+
+                is_in = False
+                is_out = False
+                if quantity_changed > 0:
+                    is_in = True
+                elif quantity_changed < 0:
+                    is_out = True
+                else:
+                    # Fallback to text match when quantity is 0/unknown
+                    in_tokens = ['giriş', 'giris', 'giriåÿ', 'giri?', 'stok giri', 'iade']
+                    out_tokens = ['çıkış', 'cikis', 'ã‡ä±kä±åÿ', '??k??', 'stok çık', 'stok cik', 'satış', 'satis']
+                    if any(token in movement_type_lower for token in in_tokens):
+                        is_in = True
+                    elif any(token in movement_type_lower for token in out_tokens):
+                        is_out = True
+
+                if is_in:
+                    mv['unit_price'] = purchase_price
+                    mv['currency'] = purchase_currency
+                elif is_out:
+                    mv['unit_price'] = sale_price
+                    mv['currency'] = sale_currency
+        return movements
 
     def save_stock_item(self, data: Dict[str, Any], item_id: Optional[int] = None) -> Optional[int]:
         """
@@ -107,7 +173,7 @@ class StockQueriesMixin:
             )
             return self.execute_query(query, params)
 
-    def add_stock_movement(self, item_id: int, movement_type: str, quantity: int, notes: str, related_service_id: Optional[int] = None, related_invoice_id: Optional[int] = None) -> Union[bool, str]:
+    def add_stock_movement(self, item_id: int, movement_type: str, quantity: int, notes: str, related_service_id: Optional[int] = None, related_invoice_id: Optional[int] = None, unit_price: Optional[float] = None, currency: Optional[str] = None) -> Union[bool, str]:
         """
         Bir stok kalemi için stok hareketi ekler ve stok miktarını günceller.
         """
@@ -116,6 +182,15 @@ class StockQueriesMixin:
         
         try:
             with conn:
+                # ensure movement detail columns exist
+                cols = [row[1] for row in conn.execute('PRAGMA table_info(stock_movements)').fetchall()]
+                if 'quantity_after' not in cols:
+                    conn.execute('ALTER TABLE stock_movements ADD COLUMN quantity_after REAL')
+                if 'unit_price' not in cols:
+                    conn.execute('ALTER TABLE stock_movements ADD COLUMN unit_price REAL')
+                if 'currency' not in cols:
+                    conn.execute('ALTER TABLE stock_movements ADD COLUMN currency TEXT')
+
                 cursor = conn.cursor()
                 current_quantity_row = cursor.execute("SELECT quantity FROM stock_items WHERE id = ?", (item_id,)).fetchone()
                 if not current_quantity_row:
@@ -140,8 +215,8 @@ class StockQueriesMixin:
                 
                 movement_date = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                 cursor.execute(
-                    "INSERT INTO stock_movements (stock_item_id, movement_type, quantity_changed, movement_date, notes, related_service_id, related_invoice_id) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                    (item_id, movement_type, quantity_changed, movement_date, notes, related_service_id, related_invoice_id)
+                    "INSERT INTO stock_movements (stock_item_id, movement_type, quantity_changed, quantity_after, unit_price, currency, movement_date, notes, related_service_id, related_invoice_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (item_id, movement_type, quantity_changed, new_quantity, unit_price, currency, movement_date, notes, related_service_id, related_invoice_id)
                 )
             logging.info(f"Stok hareketi eklendi: ID {item_id}, Tip {movement_type}, Miktar {quantity}")
             return True
@@ -174,6 +249,15 @@ class StockQueriesMixin:
 
         try:
             with conn:
+                # ensure movement detail columns exist
+                cols = [row[1] for row in conn.execute('PRAGMA table_info(stock_movements)').fetchall()]
+                if 'quantity_after' not in cols:
+                    conn.execute('ALTER TABLE stock_movements ADD COLUMN quantity_after REAL')
+                if 'unit_price' not in cols:
+                    conn.execute('ALTER TABLE stock_movements ADD COLUMN unit_price REAL')
+                if 'currency' not in cols:
+                    conn.execute('ALTER TABLE stock_movements ADD COLUMN currency TEXT')
+
                 cursor = conn.cursor()
                 item_info = cursor.execute("SELECT name, item_type, quantity, color_type FROM stock_items WHERE id = ?", (stock_item_id,)).fetchone()
                 if not item_info: raise ValueError("Stok kalemi bulunamadı.")
@@ -199,10 +283,25 @@ class StockQueriesMixin:
                 
                 # Faturayı oluştur
                 total_amount = Decimal(str(sale_price)) * Decimal(str(quantity_to_sell))
+                rates = get_exchange_rates()
+                enriched_items = []
+                for item in invoice_items:
+                    item_currency = (item.get('currency', 'TL') or 'TL').strip().upper()
+                    unit_price = Decimal(str(item.get('unit_price', 0)))
+                    quantity = Decimal(str(item.get('quantity', 0)))
+                    rate = Decimal(str(rates.get(item_currency, 1.0))) if item_currency != 'TL' else Decimal('1')
+                    unit_price_tl = unit_price * rate
+                    total_tl = unit_price_tl * quantity
+                    enriched = dict(item)
+                    enriched['currency'] = item_currency
+                    enriched['exchange_rate'] = float(rate)
+                    enriched['unit_price_tl'] = float(unit_price_tl)
+                    enriched['total_tl'] = float(total_tl)
+                    enriched_items.append(enriched)
                 invoice_date = datetime.now().strftime('%Y-%m-%d')
                 cursor.execute(
                     "INSERT INTO invoices (customer_id, invoice_type, related_id, invoice_date, total_amount, currency, details_json) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                    (customer_id, 'Cihaz Satış', customer_id, invoice_date, float(total_amount), sale_currency, json.dumps(invoice_items))
+                    (customer_id, 'Cihaz Satış', customer_id, invoice_date, float(total_amount), sale_currency, json.dumps(enriched_items, ensure_ascii=False))
                 )
                 invoice_id = cursor.lastrowid
 
@@ -213,9 +312,10 @@ class StockQueriesMixin:
                 cursor.execute("UPDATE stock_items SET quantity = quantity - ? WHERE id = ?", (quantity_to_sell, stock_item_id))
                 notes = f"{quantity_to_sell} adet cihaz {customer_name} müşterisine satıldı (Fatura No: {invoice_id})"
                 movement_date = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                new_quantity = current_quantity - quantity_to_sell
                 cursor.execute(
-                    "INSERT INTO stock_movements (stock_item_id, movement_type, quantity_changed, movement_date, notes, related_invoice_id) VALUES (?, ?, ?, ?, ?, ?)",
-                    (stock_item_id, 'Çıkış', -quantity_to_sell, movement_date, notes, invoice_id)
+                    "INSERT INTO stock_movements (stock_item_id, movement_type, quantity_changed, quantity_after, unit_price, currency, movement_date, notes, related_invoice_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (stock_item_id, '\u00c7\u0131k\u0131\u015f', -quantity_to_sell, new_quantity, float(sale_price), sale_currency, movement_date, notes, invoice_id)
                 )
             
             logging.info(f"{quantity_to_sell} adet cihaz (Stok ID: {stock_item_id}) müşteri ID {customer_id} için satıldı. Fatura No: {invoice_id}")
@@ -296,6 +396,15 @@ class StockQueriesMixin:
         invoice_id = -1
         try:
             with conn:
+                # ensure movement detail columns exist
+                cols = [row[1] for row in conn.execute('PRAGMA table_info(stock_movements)').fetchall()]
+                if 'quantity_after' not in cols:
+                    conn.execute('ALTER TABLE stock_movements ADD COLUMN quantity_after REAL')
+                if 'unit_price' not in cols:
+                    conn.execute('ALTER TABLE stock_movements ADD COLUMN unit_price REAL')
+                if 'currency' not in cols:
+                    conn.execute('ALTER TABLE stock_movements ADD COLUMN currency TEXT')
+
                 cursor = conn.cursor()
                 customer_id = sale_data['customer_id']
                 invoice_items = []
@@ -335,9 +444,10 @@ class StockQueriesMixin:
                         invoice_items.append({'description': f"{model} ({serial}) Cihaz Satışı", 'quantity': 1, 'unit_price': float(unit_price), 'currency': currency})
                     
                     cursor.execute("UPDATE stock_items SET quantity = quantity - ? WHERE id = ?", (qty, item_id))
+                    new_quantity = stock_row[0] - qty
                     cursor.execute(
-                        "INSERT INTO stock_movements (stock_item_id, movement_type, quantity_changed, movement_date, notes) VALUES (?, ?, ?, ?, ?)",
-                        (item_id, 'Çıkış', -qty, movement_date, f"{qty} adet cihaz {customer_name} müşterisine satıldı")
+                        "INSERT INTO stock_movements (stock_item_id, movement_type, quantity_changed, quantity_after, unit_price, currency, movement_date, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                        (item_id, 'Çıkış', -qty, new_quantity, float(unit_price), currency, movement_date, f"{qty} adet cihaz {customer_name} müşterisine satıldı")
                     )
                     total_amount += unit_price * Decimal(str(qty))
 
@@ -355,9 +465,10 @@ class StockQueriesMixin:
                     invoice_items.append({'description': f"{name} Sarf Satışı", 'quantity': qty, 'unit_price': float(unit_price), 'currency': currency})
                     
                     cursor.execute("UPDATE stock_items SET quantity = quantity - ? WHERE id = ?", (qty, item_id))
+                    new_quantity = stock_row[0] - qty
                     cursor.execute(
-                        "INSERT INTO stock_movements (stock_item_id, movement_type, quantity_changed, movement_date, notes) VALUES (?, ?, ?, ?, ?)",
-                        (item_id, 'Çıkış', -qty, movement_date, f"{qty} adet {name} {customer_name} müşterisine satıldı")
+                        "INSERT INTO stock_movements (stock_item_id, movement_type, quantity_changed, quantity_after, unit_price, currency, movement_date, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                        (item_id, 'Çıkış', -qty, new_quantity, float(unit_price), currency, movement_date, f"{qty} adet {name} {customer_name} müşterisine satıldı")
                     )
                     total_amount += unit_price * Decimal(str(qty))
 
@@ -375,9 +486,10 @@ class StockQueriesMixin:
                     invoice_items.append({'description': f"{name} Toner Satışı", 'quantity': qty, 'unit_price': float(unit_price), 'currency': currency})
                     
                     cursor.execute("UPDATE stock_items SET quantity = quantity - ? WHERE id = ?", (qty, item_id))
+                    new_quantity = stock_row[0] - qty
                     cursor.execute(
-                        "INSERT INTO stock_movements (stock_item_id, movement_type, quantity_changed, movement_date, notes) VALUES (?, ?, ?, ?, ?)",
-                        (item_id, 'Çıkış', -qty, movement_date, f"{qty} adet {name} {customer_name} müşterisine satıldı")
+                        "INSERT INTO stock_movements (stock_item_id, movement_type, quantity_changed, quantity_after, unit_price, currency, movement_date, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                        (item_id, 'Çıkış', -qty, new_quantity, float(unit_price), currency, movement_date, f"{qty} adet {name} {customer_name} müşterisine satıldı")
                     )
                     total_amount += unit_price * Decimal(str(qty))
 
@@ -385,7 +497,7 @@ class StockQueriesMixin:
                 invoice_date = datetime.now().strftime('%Y-%m-%d')
                 cursor.execute(
                     "INSERT INTO invoices (customer_id, invoice_type, related_id, invoice_date, total_amount, currency, details_json) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                    (customer_id, 'Satış', customer_id, invoice_date, float(total_amount), currency, json.dumps(invoice_items, ensure_ascii=False))
+                    (customer_id, 'Satış', customer_id, invoice_date, float(total_amount), currency, json.dumps(enriched_items, ensure_ascii=False))
                 )
                 invoice_id = cursor.lastrowid
                 if not invoice_id:
@@ -412,6 +524,15 @@ class StockQueriesMixin:
         
         try:
             with conn:
+                # ensure movement detail columns exist
+                cols = [row[1] for row in conn.execute('PRAGMA table_info(stock_movements)').fetchall()]
+                if 'quantity_after' not in cols:
+                    conn.execute('ALTER TABLE stock_movements ADD COLUMN quantity_after REAL')
+                if 'unit_price' not in cols:
+                    conn.execute('ALTER TABLE stock_movements ADD COLUMN unit_price REAL')
+                if 'currency' not in cols:
+                    conn.execute('ALTER TABLE stock_movements ADD COLUMN currency TEXT')
+
                 cursor = conn.cursor()
                 customer_id = sale_data['customer_id']
                 items = sale_data.get('items', [])
@@ -451,7 +572,7 @@ class StockQueriesMixin:
                     description = item['description']
                     quantity = item['quantity']
                     unit_price = item['unit_price']
-                    currency = item.get('currency', 'TL')
+                    currency = (item.get('currency', 'TL') or 'TL').strip().upper()
                     serials = item.get('serial_numbers', [])
                     
                     # Ürün tutarını TL'ye çevir
@@ -534,9 +655,10 @@ class StockQueriesMixin:
                     if currency != 'TL':
                         movement_note += f" [{unit_price} {currency} -> {item_total_tl:.2f} TL]"
                     
+                    new_quantity = stock_row[0] - quantity
                     cursor.execute(
-                        "INSERT INTO stock_movements (stock_item_id, movement_type, quantity_changed, movement_date, notes) VALUES (?, ?, ?, ?, ?)",
-                        (item_id, 'Çıkış', -quantity, movement_date, movement_note)
+                        "INSERT INTO stock_movements (stock_item_id, movement_type, quantity_changed, quantity_after, unit_price, currency, movement_date, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                        (item_id, 'Çıkış', -quantity, new_quantity, float(unit_price), currency, movement_date, movement_note)
                     )
                 
                 # Bekleyen satış kaydı - TÜM ÜRÜNLER TL'YE ÇEVRİLDİ
@@ -734,6 +856,15 @@ class StockQueriesMixin:
         
         try:
             with conn:
+                # ensure movement detail columns exist
+                cols = [row[1] for row in conn.execute('PRAGMA table_info(stock_movements)').fetchall()]
+                if 'quantity_after' not in cols:
+                    conn.execute('ALTER TABLE stock_movements ADD COLUMN quantity_after REAL')
+                if 'unit_price' not in cols:
+                    conn.execute('ALTER TABLE stock_movements ADD COLUMN unit_price REAL')
+                if 'currency' not in cols:
+                    conn.execute('ALTER TABLE stock_movements ADD COLUMN currency TEXT')
+
                 cursor = conn.cursor()
                 
                 # Pending sale verisini al
@@ -802,7 +933,21 @@ class StockQueriesMixin:
                 from utils.currency_converter import get_exchange_rates
                 rates = get_exchange_rates()
                 exchange_rate = 1.0
-                
+                enriched_items = []
+                for item in invoice_items:
+                    item_currency = (item.get('currency', 'TL') or 'TL').strip().upper()
+                    unit_price = Decimal(str(item.get('unit_price', 0)))
+                    quantity = Decimal(str(item.get('quantity', 0)))
+                    rate = Decimal(str(rates.get(item_currency, 1.0))) if item_currency != 'TL' else Decimal('1')
+                    unit_price_tl = unit_price * rate
+                    total_tl = unit_price_tl * quantity
+                    enriched = dict(item)
+                    enriched['currency'] = item_currency
+                    enriched['exchange_rate'] = float(rate)
+                    enriched['unit_price_tl'] = float(unit_price_tl)
+                    enriched['total_tl'] = float(total_tl)
+                    enriched_items.append(enriched)
+
                 if currency and currency != 'TL':
                     exchange_rate = float(rates.get(currency, 1.0))
                 
@@ -810,7 +955,7 @@ class StockQueriesMixin:
                 invoice_date = datetime.now().strftime('%Y-%m-%d')
                 cursor.execute(
                     "INSERT INTO invoices (customer_id, invoice_type, related_id, invoice_date, total_amount, currency, exchange_rate, details_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                    (customer_id, 'Satış', pending_sale_id, invoice_date, total_amount, currency, exchange_rate, json.dumps(invoice_items, ensure_ascii=False))
+                    (customer_id, 'Satış', pending_sale_id, invoice_date, total_amount, currency, exchange_rate, json.dumps(enriched_items, ensure_ascii=False))
                 )
                 
                 invoice_id = cursor.lastrowid
@@ -835,3 +980,143 @@ class StockQueriesMixin:
         except Exception as e:
             logging.error(f"Pending sale faturalama hatası: {e}", exc_info=True)
             return f"Faturalama sırasında hata: {e}"
+
+
+    def _ensure_supplier(self, cursor: sqlite3.Cursor, supplier_name: str) -> Optional[int]:
+        if not supplier_name:
+            return None
+        row = cursor.execute("SELECT id FROM suppliers WHERE name = ?", (supplier_name,)).fetchone()
+        if row:
+            return row[0]
+        cursor.execute("INSERT INTO suppliers (name) VALUES (?)", (supplier_name,))
+        return cursor.lastrowid
+
+    def _calculate_weighted_avg_cost(self, current_qty: float, current_avg: float, add_qty: float, add_cost_tl: float) -> float:
+        if current_qty <= 0:
+            return float(add_cost_tl)
+        total_cost = (current_qty * current_avg) + (add_qty * add_cost_tl)
+        total_qty = current_qty + add_qty
+        if total_qty <= 0:
+            return 0.0
+        return float(total_cost / total_qty)
+
+    def create_purchase_invoice(self, supplier_name: str, invoice_no: str, invoice_date: str, items: List[Dict[str, Any]], notes: str = "") -> Tuple[bool, Optional[str]]:
+        conn = self.get_connection()
+        if not conn:
+            return False, "Veritabani baglantisi kurulamad?."
+
+        if not items:
+            return False, "Fatura kalemi bulunamadi."
+
+        try:
+            with conn:
+                # ensure movement detail columns exist
+                cols = [row[1] for row in conn.execute('PRAGMA table_info(stock_movements)').fetchall()]
+                if 'quantity_after' not in cols:
+                    conn.execute('ALTER TABLE stock_movements ADD COLUMN quantity_after REAL')
+                if 'unit_price' not in cols:
+                    conn.execute('ALTER TABLE stock_movements ADD COLUMN unit_price REAL')
+                if 'currency' not in cols:
+                    conn.execute('ALTER TABLE stock_movements ADD COLUMN currency TEXT')
+
+                cursor = conn.cursor()
+                supplier_id = self._ensure_supplier(cursor, supplier_name)
+
+                rates = self.get_exchange_rates()
+
+                subtotal = Decimal('0')
+                tax_total = Decimal('0')
+
+                cursor.execute(
+                    """
+                    INSERT INTO purchase_invoices (supplier_id, invoice_no, invoice_date, currency, exchange_rate, subtotal, tax_total, total, notes)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (supplier_id, invoice_no, invoice_date, 'TL', 1.0, 0.0, 0.0, 0.0, notes)
+                )
+                purchase_invoice_id = cursor.lastrowid
+                if not purchase_invoice_id:
+                    raise Exception("Alis faturasi olusturulamadi.")
+
+                # Ensure new columns exist (safety for older DBs)
+                try:
+                    cols = [row[1] for row in cursor.execute("PRAGMA table_info(stock_items)").fetchall()]
+                    if 'avg_cost' not in cols:
+                        cursor.execute("ALTER TABLE stock_items ADD COLUMN avg_cost REAL DEFAULT 0.0")
+                    if 'avg_cost_currency' not in cols:
+                        cursor.execute("ALTER TABLE stock_items ADD COLUMN avg_cost_currency TEXT DEFAULT 'TL'")
+                except Exception as e:
+                    logger.warning("avg_cost columns check failed: %s", e)
+
+                for item in items:
+                    stock_item_id = int(item['stock_item_id'])
+                    qty = Decimal(str(item.get('quantity', 0)))
+                    unit_price = Decimal(str(item.get('unit_price', 0)))
+                    currency = item.get('currency', 'TL') or 'TL'
+                    tax_rate = Decimal(str(item.get('tax_rate', 0)))
+
+                    line_subtotal = qty * unit_price
+                    line_tax = (line_subtotal * tax_rate / Decimal('100')).quantize(Decimal('0.01'))
+                    line_total = line_subtotal + line_tax
+
+                    subtotal += line_subtotal
+                    tax_total += line_tax
+
+                    rate = Decimal(str(rates.get(currency, 1.0)))
+                    unit_cost_tl = (unit_price * rate).quantize(Decimal('0.0001'))
+
+                    cursor.execute(
+                        """
+                        INSERT INTO purchase_items
+                        (purchase_invoice_id, stock_item_id, description, quantity, unit_price, currency, tax_rate, tax_amount, total, unit_cost_tl)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        """,
+                        (purchase_invoice_id, stock_item_id, None, float(qty), float(unit_price), currency, float(tax_rate), float(line_tax), float(line_total), float(unit_cost_tl))
+                    )
+
+                    row = cursor.execute(
+                        "SELECT quantity, avg_cost FROM stock_items WHERE id = ?",
+                        (stock_item_id,)
+                    ).fetchone()
+                    if not row:
+                        raise Exception(f"Stok kalemi bulunamadi: {stock_item_id}")
+
+                    current_qty = float(row[0] or 0)
+                    current_avg = float(row[1] or 0)
+                    new_avg = self._calculate_weighted_avg_cost(current_qty, current_avg, float(qty), float(unit_cost_tl))
+                    new_qty = current_qty + float(qty)
+
+                    cursor.execute(
+                        "UPDATE stock_items SET quantity = ?, avg_cost = ?, avg_cost_currency = 'TL' WHERE id = ?",
+                        (new_qty, new_avg, stock_item_id)
+                    )
+
+                    movement_date = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                    notes_text = f"Alis Faturasi: {invoice_no or purchase_invoice_id}"
+                    cursor.execute(
+                        """
+                        INSERT INTO stock_movements (stock_item_id, movement_type, quantity_changed, quantity_after, unit_price, currency, movement_date, notes)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                        """,
+                        (stock_item_id, 'Giri?', float(qty), new_qty, float(unit_price), currency, movement_date, notes_text)
+                    )
+
+                    cursor.execute(
+                        """
+                        INSERT INTO stock_price_history (stock_item_id, price_type, price, currency, source)
+                        VALUES (?, 'purchase', ?, ?, ?)
+                        """,
+                        (stock_item_id, float(unit_price), currency, f"purchase_invoice:{purchase_invoice_id}")
+                    )
+
+                total = subtotal + tax_total
+                cursor.execute(
+                    "UPDATE purchase_invoices SET subtotal = ?, tax_total = ?, total = ? WHERE id = ?",
+                    (float(subtotal), float(tax_total), float(total), purchase_invoice_id)
+                )
+
+                return True, str(purchase_invoice_id)
+        except Exception as e:
+            logger.error(f"Alis faturasi olusturma hatasi: {e}", exc_info=True)
+            return False, f"Hata: {e}"
+

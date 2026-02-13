@@ -2,6 +2,8 @@
 
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QComboBox, QTableWidget,
                              QTableWidgetItem, QPushButton, QMessageBox, QLabel)
+import logging
+logger = logging.getLogger(__name__)
 from PyQt6.QtPrintSupport import QPrinter, QPrintDialog
 from utils.database import db_manager
 
@@ -64,21 +66,21 @@ class TechnicianTasksDialog(QDialog):
     def load_technicians(self):
         """Saha teknisyenlerini combo'ya yükler."""
         try:
-            print(f"[DEBUG] load_technicians başladı")
+            logger.debug(f"[DEBUG] load_technicians başladı")
             technicians = self.db.get_technicians()
-            print(f"[DEBUG] get_technicians() sonucu: {technicians}")
+            logger.debug(f"[DEBUG] get_technicians() sonucu: {technicians}")
             
             # Admin ve SuperAdmin tüm teknisyenleri görebilir
             self.technician_combo.addItem("Tüm Teknisyenler", None)
             for tech_id, tech_name in technicians:
-                print(f"[DEBUG] Ekleniyor: {tech_name} (ID: {tech_id})")
+                logger.debug(f"[DEBUG] Ekleniyor: {tech_name} (ID: {tech_id})")
                 self.technician_combo.addItem(tech_name, tech_id)
             
-            print(f"[DEBUG] ComboBox'a eklenen item sayısı: {self.technician_combo.count()}")
+            logger.debug(f"[DEBUG] ComboBox'a eklenen item sayısı: {self.technician_combo.count()}")
             
         except Exception as e:
             import traceback
-            print(f"[DEBUG ERROR] load_technicians hatası:")
+            logger.debug(f"[DEBUG ERROR] load_technicians hatası:")
             traceback.print_exc()
             QMessageBox.critical(self, "Hata", f"Teknisyenler yüklenirken hata: {e}")
 

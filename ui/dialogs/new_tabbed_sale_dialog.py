@@ -3,6 +3,8 @@
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QTabWidget, QComboBox, QDialogButtonBox, QLabel, QTableWidget, QTableWidgetItem, QPushButton, QSpinBox, QLineEdit, QMessageBox, QWidget, QFormLayout, QHeaderView
 )
+import logging
+logger = logging.getLogger(__name__)
 from PyQt6.QtCore import Qt
 from utils.database import db_manager
 
@@ -422,5 +424,5 @@ class NewTabbedSaleDialog(QDialog):
                 return dealer_price
                 
         except Exception as e:
-            print(f"Fiyat hesaplama hatası: {e}")
+            logger.error(f"Fiyat hesaplama hatası: {e}")
             return 0.0

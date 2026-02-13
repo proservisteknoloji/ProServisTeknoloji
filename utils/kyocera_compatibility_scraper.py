@@ -7,6 +7,7 @@ Web sitesinden çekilen veriler ile otomatik eşleştirme yapar.
 
 import re
 import logging
+logger = logging.getLogger(__name__)
 from typing import Dict, List, Tuple, Optional
 
 # Kyocera uyumluluk verilerini içeren sözlük
@@ -607,7 +608,7 @@ if __name__ == "__main__":
     ]
     
     for device in test_devices:
-        print(f"\n--- {device} ---")
+        logger.info(f"\n--- {device} ---")
         compatible = find_compatible_toners_for_device(device)
         for toner in compatible[:3]:  # İlk 3 sonucu göster
-            print(f"  {toner['toner_code']} - {toner['color_type']} - Güven: %{toner['confidence']*100:.0f}")
+            logger.info(f"  {toner['toner_code']} - {toner['color_type']} - Güven: %{toner['confidence']*100:.0f}")

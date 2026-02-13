@@ -20,6 +20,10 @@ class ServiceEditDialog(QDialog):
         self.technician_mode = technician_mode
         self.device_id = None
         self.device_type = None
+        self._original_device_id = None
+        self._original_customer_id = None
+        self._loading_record = False
+        self._device_changed = False
         self.email_thread = None
 
         self.setWindowTitle("Servis Kaydı Düzenle" if self.record_id else "Yeni Servis Kaydı")
@@ -149,7 +153,9 @@ class ServiceEditDialog(QDialog):
     def _connect_signals(self):
         """Sinyalleri ilgili slotlara bağlar."""
         self.device_combo.currentIndexChanged.connect(self._on_device_selected)
+        self.device_combo.activated.connect(self._on_device_changed)
         self.customer_combo.currentIndexChanged.connect(self._update_device_button)
+        self.customer_combo.activated.connect(self._on_customer_changed)
         self.customer_search.textChanged.connect(self._filter_customers)
         self.add_customer_btn.clicked.connect(self._add_new_customer)
         self.add_device_btn.clicked.connect(self._add_device)
@@ -171,8 +177,7 @@ class ServiceEditDialog(QDialog):
         self.status_combo.currentTextChanged.connect(self._update_parts_button_visibility)
         self.status_combo.currentTextChanged.connect(self._update_action_buttons_visibility)
 
-        if not self.record_id:
-            self.customer_combo.currentIndexChanged.connect(self._update_devices_combo)
+        # Only update device list on user-initiated customer change.
 
     def _load_initial_data(self):
         """Başlangıç verilerini (müşteriler, teknisyenler, kayıt bilgileri) yükler."""
@@ -214,9 +219,12 @@ class ServiceEditDialog(QDialog):
 
     def _update_devices_combo(self):
         """Seçili müşteriye ait cihazları ComboBox'a yükler."""
+        from PyQt6.QtCore import QSignalBlocker
+        blocker = QSignalBlocker(self.device_combo)
         self.device_combo.clear()
         customer_id = self.customer_combo.currentData()
         if not customer_id:
+            del blocker
             self._on_device_selected()
             return
 
@@ -225,10 +233,30 @@ class ServiceEditDialog(QDialog):
             devices = self.db.fetch_all(query, (customer_id,))
             for dev_id, model, serial, dev_type in devices:
                 self.device_combo.addItem(f"{model} ({serial})", (dev_id, dev_type))
+            # Keep original device selection for existing records unless user changed it.
+            if self.record_id and not self._device_changed and self._original_device_id and customer_id == self._original_customer_id:
+                for i in range(self.device_combo.count()):
+                    item_data = self.device_combo.itemData(i)
+                    if item_data and item_data[0] == self._original_device_id:
+                        self.device_combo.setCurrentIndex(i)
+                        break
         except Exception as e:
             QMessageBox.critical(self, "Cihaz Yükleme Hatası", f"Cihazlar yüklenirken bir hata oluştu: {e}")
         finally:
+            del blocker
             self._on_device_selected()
+
+    def _on_customer_changed(self, _index: int):
+        """Kullanıcı müşteri değiştirirse cihaz listesini yeniler."""
+        if self.record_id:
+            self._device_changed = True
+            self._original_device_id = None
+        self._update_devices_combo()
+
+    def _on_device_changed(self, _index: int):
+        """Kullanıcı cihaz değiştirirse işaretle."""
+        if not self._loading_record:
+            self._device_changed = True
 
     def _on_device_selected(self):
         """Cihaz seçimi değiştiğinde sayaç alanlarının görünürlüğünü ayarlar."""
@@ -249,8 +277,9 @@ class ServiceEditDialog(QDialog):
 
     def _load_record_data(self):
         """Mevcut bir servis kaydının verilerini forma yükler."""
-        self.customer_combo.setEnabled(False)
-        self.device_combo.setEnabled(False)
+        self.customer_combo.setEnabled(True)
+        self.device_combo.setEnabled(True)
+        self._loading_record = True
         
         try:
             query = """SELECT c.id, cd.id, cd.device_type, sr.technician_id, sr.problem_description,
@@ -266,6 +295,8 @@ class ServiceEditDialog(QDialog):
                 return
 
             cust_id, dev_id, dev_type, tech_id, problem, notes, status, bw, color, technician_report, service_form_path = data
+            self._original_device_id = dev_id
+            self._original_customer_id = cust_id
             
             cust_index = self.customer_combo.findData(cust_id)
             if cust_index > -1: self.customer_combo.setCurrentIndex(cust_index)
@@ -286,14 +317,17 @@ class ServiceEditDialog(QDialog):
                         break
             
             if dev_index > -1: 
+                from PyQt6.QtCore import QSignalBlocker
+                blocker = QSignalBlocker(self.device_combo)
                 self.device_combo.setCurrentIndex(dev_index)
-                print(f"DEBUG: Cihaz seçildi: {self.device_combo.currentText()}")
+                del blocker
             else:
-                print(f"DEBUG: Cihaz bulunamadı! Servis kaydındaki cihaz ID {dev_id} ({dev_type}) combo box'ta yok.")
                 # Alternatif: İlk cihazı seç
                 if self.device_combo.count() > 0:
+                    from PyQt6.QtCore import QSignalBlocker
+                    blocker = QSignalBlocker(self.device_combo)
                     self.device_combo.setCurrentIndex(0)
-                    print(f"DEBUG: İlk cihaz seçildi: {self.device_combo.currentText()}")
+                    del blocker
 
             tech_index = self.technician_combo.findData(tech_id)
             if tech_index > -1: self.technician_combo.setCurrentIndex(tech_index)
@@ -317,6 +351,9 @@ class ServiceEditDialog(QDialog):
         except Exception as e:
             QMessageBox.critical(self, "Veri Yükleme Hatası", f"Servis kaydı verileri yüklenemedi: {e}")
             self.reject()
+        finally:
+            self._loading_record = False
+            self._device_changed = False
 
     def accept(self):
         """Form verilerini doğrular ve kaydeder."""
@@ -371,7 +408,8 @@ class ServiceEditDialog(QDialog):
     def _collect_data_from_form(self) -> dict:
         """Formdaki verileri bir sözlük olarak toplar."""
         return {
-            "device_id": self.device_id,
+            # Mevcut kayıtta cihaz değişmediyse eski cihazı koru; değiştiyse yeni seçimi kullan
+            "device_id": (self.device_id if (not self.record_id or self._device_changed) else self._original_device_id),
             "technician_id": self.technician_combo.currentData(),
             "assigned_user_id": self.technician_combo.currentData(),  # Eski uyumluluk için
             "problem_description": self.problem_input.toPlainText(),
@@ -410,6 +448,9 @@ class ServiceEditDialog(QDialog):
         """Mevcut bir servis kaydını günceller."""
         data = self._collect_data_from_form()
         data["id"] = self.record_id
+        # Cihaz değişmedi ise orijinal ID'yi koru, değiştiyse yeni seçimi kullan
+        if self.record_id and not self._device_changed and self._original_device_id:
+            data["device_id"] = self._original_device_id
         
         # Eğer durum "Teslim Edildi" ise completed_date güncelle, değilse None
         if data["status"] == "Teslim Edildi":

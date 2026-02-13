@@ -2,6 +2,7 @@
 
 import os
 import logging
+logger = logging.getLogger(__name__)
 import traceback
 from PyQt6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QTabWidget,
                              QLabel, QStatusBar, QMessageBox, QHeaderView, QTableWidget, QTableWidgetItem,
@@ -164,9 +165,9 @@ class MainWindow(QMainWindow):
         except Exception as e:
             # FIXED: Add try-catch for Type conversion
             try:
-                print(f"Ekran boyutu ayarlanırken hata: {e}")
+                logger.error(f"Ekran boyutu ayarlanırken hata: {e}")
             except Exception as e:
-                print(f'Error in Type conversion: {e}')
+                logger.error(f'Error in Type conversion: {e}')
             # Varsayılan boyutlara geri dön
             self.resize(1024, 700)
             self.setMinimumSize(800, 600)
@@ -467,7 +468,7 @@ class MainWindow(QMainWindow):
             # Oturum bilgilerini temizle
             pass  # Session manager kaldırıldı
         except Exception as e:
-            print(f"Session cleanup error: {e}")
+            logger.error(f"Session cleanup error: {e}")
         super().closeEvent(a0)
 
     def switch_to_billing_tab(self):
@@ -503,7 +504,7 @@ class MainWindow(QMainWindow):
                         self.status_bar.showMessage("Billing sekmesine geçildi - sayaç okuma için hazır", 3000)
                     break
         except Exception as e:
-            print(f"Billing sekmesine geçiş hatası: {e}")
+            logger.error(f"Billing sekmesine geçiş hatası: {e}")
             self.status_bar.showMessage("Billing sekmesine geçiş sırasında hata oluştu", 3000)
 
     def _setup_easter_egg_shortcut(self):
