@@ -497,3 +497,4 @@ Bu proje **MIT Lisansı** altında lisanslanmıştır. Detaylar için [LICENSE](
 Made with ❤️ in Turkey
 
 </div>
+
