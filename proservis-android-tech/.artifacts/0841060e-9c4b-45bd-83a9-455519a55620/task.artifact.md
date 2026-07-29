@@ -1,0 +1,4 @@
+- [x] `Medium_Phone_API_36.1` emülatörünü başlat.
+- [x] Emülatörün hazır (boot completed) olduğunu doğrula.
+- [x] Uygulamayı (`app` modülü) emülatöre yükle ve çalıştır.
+- [x] Uygulamanın çalıştığını ekran görüntüsü ile doğrula.
