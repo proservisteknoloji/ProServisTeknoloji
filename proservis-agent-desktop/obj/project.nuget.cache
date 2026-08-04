@@ -1,0 +1,14 @@
+{
+  "version": 2,
+  "dgSpecHash": "fvfFBCAbr+0=",
+  "success": true,
+  "projectFilePath": "C:\\Users\\umits\\Desktop\\ProservisProje_web_compile\\proservis-agent-desktop\\Proservis.Agent.Desktop.csproj",
+  "expectedPackageFiles": [
+    "C:\\Users\\umits\\.nuget\\packages\\microsoft.net.illink.tasks\\10.0.10\\microsoft.net.illink.tasks.10.0.10.nupkg.sha512",
+    "C:\\Users\\umits\\.nuget\\packages\\sharpsnmplib\\10.0.0-beta1\\sharpsnmplib.10.0.0-beta1.nupkg.sha512",
+    "C:\\Users\\umits\\.nuget\\packages\\microsoft.netcore.app.runtime.win-x64\\10.0.10\\microsoft.netcore.app.runtime.win-x64.10.0.10.nupkg.sha512",
+    "C:\\Users\\umits\\.nuget\\packages\\microsoft.windowsdesktop.app.runtime.win-x64\\10.0.10\\microsoft.windowsdesktop.app.runtime.win-x64.10.0.10.nupkg.sha512",
+    "C:\\Users\\umits\\.nuget\\packages\\microsoft.aspnetcore.app.runtime.win-x64\\10.0.10\\microsoft.aspnetcore.app.runtime.win-x64.10.0.10.nupkg.sha512"
+  ],
+  "logs": []
+}

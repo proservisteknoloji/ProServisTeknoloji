@@ -1,0 +1,2 @@
+C:\Users\umits\Desktop\ProservisProje_web_compile\ProservisAgent_SingleFile\Proservis.Agent.Desktop.pdb
+C:\Users\umits\Desktop\ProservisProje_web_compile\ProservisAgent_SingleFile\Proservis.Agent.Desktop.exe

@@ -192,12 +192,14 @@ class StockTab(QWidget):
         # Buton alanı
         btn_layout = QHBoxLayout()
         self.add_second_hand_btn = QPushButton("➕ 2. El Cihaz Ekle")
+        self.edit_second_hand_btn = QPushButton("✏️ Düzenle")
+        self.history_second_hand_btn = QPushButton("📋 Geçmiş Görüntüle")
         self.scrap_device_btn = QPushButton("🗑️ Hurda Çıkar")
         self.delete_second_hand_btn = QPushButton("🗑️ Cihazı Sil")
         self.print_second_hand_btn = QPushButton("🖨️ 2. El Listesi Yazdır")
-        
+
         # Buton stilleri
-        for btn in [self.add_second_hand_btn, self.scrap_device_btn, self.delete_second_hand_btn, self.print_second_hand_btn]:
+        for btn in [self.add_second_hand_btn, self.edit_second_hand_btn, self.history_second_hand_btn, self.scrap_device_btn, self.delete_second_hand_btn, self.print_second_hand_btn]:
             btn.setStyleSheet("""
                 QPushButton {
                     background-color: #2196F3;
@@ -210,7 +212,7 @@ class StockTab(QWidget):
                     background-color: #1976D2;
                 }
             """)
-        
+
         self.scrap_device_btn.setStyleSheet("""
             QPushButton {
                 background-color: #F44336;
@@ -235,11 +237,15 @@ class StockTab(QWidget):
                 background-color: #8E0000;
             }
         """)
-        
+
+        self.edit_second_hand_btn.setEnabled(False)
+        self.history_second_hand_btn.setEnabled(False)
         self.scrap_device_btn.setEnabled(False)
         self.delete_second_hand_btn.setEnabled(False)
-        
+
         btn_layout.addWidget(self.add_second_hand_btn)
+        btn_layout.addWidget(self.edit_second_hand_btn)
+        btn_layout.addWidget(self.history_second_hand_btn)
         btn_layout.addWidget(self.scrap_device_btn)
         btn_layout.addWidget(self.delete_second_hand_btn)
         btn_layout.addStretch()
@@ -280,6 +286,8 @@ class StockTab(QWidget):
         
         # Sinyalleri bağla
         self.add_second_hand_btn.clicked.connect(self.add_second_hand_device)
+        self.edit_second_hand_btn.clicked.connect(self.edit_second_hand_device_from_button)
+        self.history_second_hand_btn.clicked.connect(self.show_second_hand_device_history)
         self.scrap_device_btn.clicked.connect(self.scrap_second_hand_device)
         self.delete_second_hand_btn.clicked.connect(self.delete_second_hand_device)
         self.print_second_hand_btn.clicked.connect(self.print_second_hand_list)
@@ -853,16 +861,21 @@ class StockTab(QWidget):
             
             new_row_to_select = -1
             for row, item_data in enumerate(items):
-                # Muadil tonerleri vurgula
+                # Tonerlerde orijinal/muadil etiketini görünür tut
                 name = item_data.get('name', '')
-                if item_data.get('item_type', '') == 'Toner' and '(Muadil)' in name:
-                    display_name = f"{name} 🔄 MUADİL"
+                part_number = item_data.get('part_number', '') or ''
+                if item_data.get('item_type', '') == 'Toner':
+                    toner_text = f"{name} {part_number}".lower()
+                    if 'muadil' in toner_text:
+                        display_name = f"{name} 🔄 MUADİL"
+                    else:
+                        display_name = f"{name} ✅ ORİJİNAL"
                 else:
                     display_name = name
                 self.stock_table.setItem(row, 0, QTableWidgetItem(str(item_data.get('id', ''))))
                 self.stock_table.setItem(row, 1, QTableWidgetItem(item_data.get('item_type', '')))
                 self.stock_table.setItem(row, 2, QTableWidgetItem(display_name))
-                self.stock_table.setItem(row, 3, QTableWidgetItem(item_data.get('part_number', '')))
+                self.stock_table.setItem(row, 3, QTableWidgetItem(part_number))
                 self.stock_table.setItem(row, 4, QTableWidgetItem(str(item_data.get('quantity', ''))))
                 
                 if item_data.get('id') == current_id:
@@ -1905,14 +1918,17 @@ class StockTab(QWidget):
     def refresh_second_hand_stock(self):
         """2. El cihaz stok listesini yeniler."""
         self.second_hand_table.setRowCount(0)
-        
+
         query = '''
-            SELECT id, device_model, serial_number, source_person, 
-                   acquisition_date, purchase_price, COALESCE(sale_price, 0) as sale_price, status, notes
-            FROM second_hand_devices 
-            ORDER BY acquisition_date DESC
+            SELECT shd.id, shd.device_model, shd.serial_number,
+                   COALESCE(c.name, shd.source_person) as source_person,
+                   shd.acquisition_date, shd.purchase_price, COALESCE(shd.sale_price, 0) as sale_price,
+                   shd.status, shd.notes
+            FROM second_hand_devices shd
+            LEFT JOIN customers c ON c.id = shd.customer_id
+            ORDER BY shd.acquisition_date DESC
         '''
-        
+
         try:
             devices = self.db.fetch_all(query)
             for row_idx, device in enumerate(devices):
@@ -1923,12 +1939,12 @@ class StockTab(QWidget):
                 self.second_hand_table.setItem(row_idx, 3, QTableWidgetItem(device['source_person'] or ''))
                 self.second_hand_table.setItem(row_idx, 4, QTableWidgetItem(device['acquisition_date'] or ''))
                 self.second_hand_table.setItem(row_idx, 5, QTableWidgetItem(str(device['purchase_price'] or 0)))
-                
+
                 # Satış fiyatı ve kâr marjı hesapla
                 purchase_price = float(device['purchase_price'] or 0)
                 sale_price = float(device['sale_price'] or (purchase_price * 1.3))  # Varsayılan %30 kâr
                 profit_margin = sale_price - purchase_price
-                
+
                 self.second_hand_table.setItem(row_idx, 6, QTableWidgetItem(f"{sale_price:.2f}"))
                 self.second_hand_table.setItem(row_idx, 7, QTableWidgetItem(device['status'] or 'Stokta'))
                 self.second_hand_table.setItem(row_idx, 8, QTableWidgetItem(f"{profit_margin:.2f}"))
@@ -2192,10 +2208,12 @@ class StockTab(QWidget):
         try:
             device = self.db.fetch_one(
                 """
-                SELECT id, device_model, serial_number, source_person, acquisition_date,
-                       purchase_price, sale_price, status, notes
-                FROM second_hand_devices
-                WHERE id = ?
+                SELECT shd.id, shd.device_model, shd.serial_number, shd.customer_id, shd.source_person,
+                       shd.acquisition_date, shd.purchase_price, shd.sale_price, shd.status, shd.notes,
+                       c.name as customer_name
+                FROM second_hand_devices shd
+                LEFT JOIN customers c ON c.id = shd.customer_id
+                WHERE shd.id = ?
                 """,
                 (device_id,)
             )
@@ -2208,6 +2226,7 @@ class StockTab(QWidget):
             old_status = device['status'] or 'Stokta'
 
             from PyQt6.QtWidgets import QDialog, QFormLayout, QLineEdit, QComboBox, QDialogButtonBox
+            from PyQt6.QtCore import pyqtSignal as Signal
 
             dialog = QDialog(self)
             dialog.setWindowTitle("2. El Cihaz Düzenle")
@@ -2216,7 +2235,7 @@ class StockTab(QWidget):
 
             model_input = QLineEdit(device['device_model'] or "")
             serial_input = QLineEdit(device['serial_number'] or "")
-            source_input = QLineEdit(device['source_person'] or "")
+            source_input = QLineEdit(device['customer_name'] or device['source_person'] or "")
             date_input = QLineEdit(device['acquisition_date'] or "")
             date_input.setPlaceholderText("YYYY-MM-DD")
             price_input = QLineEdit(str(device['purchase_price'] or 0))
@@ -2247,6 +2266,7 @@ class StockTab(QWidget):
                 'device_model': model_input.text().strip(),
                 'serial_number': serial_input.text().strip(),
                 'source_person': source_input.text().strip(),
+                'customer_id': device['customer_id'],
                 'acquisition_date': date_input.text().strip(),
                 'purchase_price': float(price_input.text() or 0),
                 'sale_price': float(sale_price_input.text() or 0),
@@ -2261,12 +2281,12 @@ class StockTab(QWidget):
             self.db.execute_query(
                 """
                 UPDATE second_hand_devices
-                SET device_model = ?, serial_number = ?, source_person = ?, acquisition_date = ?,
+                SET device_model = ?, serial_number = ?, source_person = ?, customer_id = ?, acquisition_date = ?,
                     purchase_price = ?, sale_price = ?, status = ?, notes = ?
                 WHERE id = ?
                 """,
                 (
-                    data['device_model'], data['serial_number'], data['source_person'],
+                    data['device_model'], data['serial_number'], data['source_person'], data['customer_id'],
                     data['acquisition_date'], data['purchase_price'], data['sale_price'],
                     data['status'], data['notes'], device_id
                 )
@@ -2350,14 +2370,100 @@ class StockTab(QWidget):
         except Exception as e:
             log_error("StockTab", e)
 
+    def edit_second_hand_device_from_button(self):
+        """Edit butonu tıklandığında seçili cihazı düzenle."""
+        selected_row = self.second_hand_table.currentRow()
+        if selected_row < 0:
+            QMessageBox.warning(self, "Uyarı", "Lütfen düzenlemek için bir cihaz seçin.")
+            return
+        self.edit_second_hand_device(self.second_hand_table.item(selected_row, 0))
+
+    def show_second_hand_device_history(self):
+        """Seçili 2. El cihazının geçmiş detaylarını gösterir."""
+        selected_row = self.second_hand_table.currentRow()
+        if selected_row < 0:
+            QMessageBox.warning(self, "Uyarı", "Lütfen bir cihaz seçin.")
+            return
+
+        id_item = self.second_hand_table.item(selected_row, 0)
+        if not id_item:
+            return
+        device_id = int(id_item.text())
+
+        try:
+            device = self.db.fetch_one(
+                """
+                SELECT shd.id, shd.device_model, shd.serial_number, shd.customer_id,
+                       shd.acquisition_date, shd.purchase_price, shd.sale_price,
+                       shd.status, shd.notes,
+                       c.name as customer_name
+                FROM second_hand_devices shd
+                LEFT JOIN customers c ON c.id = shd.customer_id
+                WHERE shd.id = ?
+                """,
+                (device_id,)
+            )
+            if not device:
+                QMessageBox.warning(self, "Hata", "Cihaz bilgisi bulunamadı.")
+                return
+
+            from PyQt6.QtWidgets import QDialog, QVBoxLayout, QLabel, QTextEdit, QDialogButtonBox
+            from PyQt6.QtCore import Qt
+
+            history_dialog = QDialog(self)
+            history_dialog.setWindowTitle(f"📋 Cihaz Geçmişi: {device['device_model']}")
+            history_dialog.setMinimumSize(600, 500)
+            layout = QVBoxLayout(history_dialog)
+
+            # Temel bilgiler
+            info_text = f"""
+<b>Cihaz Model:</b> {device['device_model'] or 'N/A'}<br>
+<b>Seri No:</b> {device['serial_number'] or 'N/A'}<br>
+<b>Mevcut Durum:</b> {device['status'] or 'Stokta'}<br>
+<b>Alınan Kişi/Kurum:</b> {device['customer_name'] or device.get('notes', 'N/A')}<br>
+<b>Alınma Tarihi:</b> {device['acquisition_date'] or 'N/A'}<br>
+<b>Alış Fiyatı:</b> {device['purchase_price'] or 0:.2f} TL<br>
+<b>Satış Fiyatı:</b> {device['sale_price'] or 0:.2f} TL<br>
+"""
+            info_label = QLabel(info_text)
+            info_label.setStyleSheet("""
+                background-color: #f0f4f8;
+                padding: 10px;
+                border-radius: 5px;
+                border: 1px solid #ccc;
+            """)
+            layout.addWidget(info_label)
+
+            # Geçmiş/Notlar
+            layout.addWidget(QLabel("<b>📝 Geçmiş & Notlar:</b>"))
+            history_edit = QTextEdit()
+            history_edit.setReadOnly(True)
+            history_edit.setText(device['notes'] or "Henüz geçmiş kaydı yok.")
+            layout.addWidget(history_edit)
+
+            # Kapatma butonu
+            buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
+            buttons.rejected.connect(history_dialog.reject)
+            layout.addWidget(buttons)
+
+            history_dialog.exec()
+
+        except Exception as e:
+            log_error("StockTab", e)
+            QMessageBox.critical(self, "Hata", f"Cihaz geçmişi gösterilemedi: {e}")
+
     def second_hand_device_selected(self):
         """2. El cihaz seçildiğinde hurda butonunu aktif eder."""
         selection_model = self.second_hand_table.selectionModel()
         if selection_model:
             selected_rows = selection_model.selectedRows()
+            self.edit_second_hand_btn.setEnabled(len(selected_rows) > 0)
+            self.history_second_hand_btn.setEnabled(len(selected_rows) > 0)
             self.scrap_device_btn.setEnabled(len(selected_rows) > 0)
             self.delete_second_hand_btn.setEnabled(len(selected_rows) > 0)
         else:
+            self.edit_second_hand_btn.setEnabled(False)
+            self.history_second_hand_btn.setEnabled(False)
             self.scrap_device_btn.setEnabled(False)
             self.delete_second_hand_btn.setEnabled(False)
 

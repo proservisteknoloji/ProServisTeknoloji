@@ -619,6 +619,17 @@ class DatabaseManager(GeneralQueriesMixin, ServiceQueriesMixin, StockQueriesMixi
             self.execute_query("ALTER TABLE CpcFaturalari RENAME TO cpc_invoices")
             logging.info("Tablo 'CpcFaturalari' -> 'cpc_invoices' olarak yeniden adlandırıldı.")
 
+        # second_hand_devices tablosuna customer_id alanı ekle (müşteri adı göstermek için)
+        self._add_column_if_not_exists('second_hand_devices', 'customer_id', 'INTEGER')
+
+        # customer_devices tablosuna bakım anlaşması alanları ekle
+        self._add_column_if_not_exists('customer_devices', 'has_maintenance_contract', 'INTEGER DEFAULT 0')
+        self._add_column_if_not_exists('customer_devices', 'maintenance_period', "TEXT DEFAULT 'Aylık'")
+        self._add_column_if_not_exists('customer_devices', 'last_maintenance_date', 'TEXT')
+        self._add_column_if_not_exists('customer_devices', 'next_maintenance_date', 'TEXT')
+        self._add_column_if_not_exists('customer_devices', 'maintenance_price', 'DECIMAL(12,4) DEFAULT 0')
+        self._add_column_if_not_exists('customer_devices', 'maintenance_currency', "TEXT DEFAULT 'TL'")
+
         if not self._create_performance_indexes():
             logging.warning('Index olusturma basarisiz - performans dusuk olabilir')
 

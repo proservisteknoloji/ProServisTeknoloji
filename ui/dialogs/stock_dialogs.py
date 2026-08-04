@@ -86,6 +86,10 @@ class StockItemDialog(QDialog):
             self.quantity_spin.mouseDoubleClickEvent = lambda a0: self._quantity_double_clicked(a0)
 
         self.supplier_input = QLineEdit()
+        self.toner_variant_combo = None
+        if self.item_type == "Toner":
+            self.toner_variant_combo = QComboBox()
+            self.toner_variant_combo.addItems(["Orijinal", "Muadil"])
 
         # Cihaz tipi için özel alanlar
         if self.is_device:
@@ -261,6 +265,8 @@ class StockItemDialog(QDialog):
             # Cihaz olmayan kartlar için normal layout
             layout.addRow("İsim/Model (*):", self.name_input)
             layout.addRow("Parça Numarası:", self.part_number_input)
+            if self.item_type == "Toner" and self.toner_variant_combo is not None:
+                layout.addRow("Toner Etiketi:", self.toner_variant_combo)
             
             # --- YENİ: Uyumlu Modeller Sadece Buraya Ekleniyor ---
             layout.addRow("Uyumlu Modeller:", self.compatible_models_input)
@@ -348,6 +354,9 @@ class StockItemDialog(QDialog):
 
         self.description_edit.setText(clean_description or '')
         self.supplier_input.setText(data.get('supplier', ''))
+        if self.item_type == "Toner" and self.toner_variant_combo is not None:
+            toner_text = f"{data.get('name', '')} {data.get('part_number', '')} {description}".lower()
+            self.toner_variant_combo.setCurrentText("Muadil" if "muadil" in toner_text else "Orijinal")
         
         if self.is_device:
             self.color_type_combo.setCurrentText(data.get('color_type', 'Siyah-Beyaz'))
@@ -404,6 +413,21 @@ class StockItemDialog(QDialog):
             'supplier': self.supplier_input.text().strip(),
             'is_consignment': 0
         }
+
+        if self.item_type == "Toner" and self.toner_variant_combo is not None:
+            is_muadil = self.toner_variant_combo.currentText() == "Muadil"
+            if is_muadil:
+                if data['name'] and "(Muadil)" not in data['name']:
+                    data['name'] = f"{data['name']} (Muadil)"
+                if data['part_number'] and "(Muadil)" not in data['part_number']:
+                    data['part_number'] = f"{data['part_number']} (Muadil)"
+                if 'Muadil' not in data['description']:
+                    data['description'] = f"{data['description']}\nMuadil Toner".strip()
+            else:
+                data['name'] = data['name'].replace(" (Muadil)", "")
+                data['part_number'] = data['part_number'].replace(" (Muadil)", "")
+                if not data['description']:
+                    data['description'] = "Orijinal Toner"
         
         if self.is_device:
             data['color_type'] = self.color_type_combo.currentText()

@@ -36,6 +36,7 @@ class CPCTab(QWidget):
         self.user_role = user_role or "user"
         self.selected_customer_id = None
         self.selected_device_id = None
+        self.current_product_type = 'all'
         self.current_order_items = []
         
         # Filtreleme için timer (debounce özelliği)
@@ -350,8 +351,13 @@ class CPCTab(QWidget):
             query = """
                 SELECT DISTINCT c.id, c.name
                 FROM customers c
-                JOIN customer_devices cd ON c.id = cd.customer_id
-                WHERE cd.is_cpc = 1
+                WHERE EXISTS (
+                    SELECT 1
+                    FROM customer_devices cd
+                    LEFT JOIN customer_locations cl ON cl.id = cd.location_id
+                    WHERE cd.is_cpc = 1
+                      AND (cd.customer_id = c.id OR cl.customer_id = c.id)
+                )
                 ORDER BY c.name
             """
             customers = self.db.fetch_all(query)
@@ -397,8 +403,14 @@ class CPCTab(QWidget):
                 query = """
                     SELECT DISTINCT c.id, c.name
                     FROM customers c
-                    JOIN customer_devices cd ON c.id = cd.customer_id
-                    WHERE cd.is_cpc = 1 AND LOWER(c.name) LIKE ?
+                    WHERE LOWER(c.name) LIKE ?
+                      AND EXISTS (
+                          SELECT 1
+                          FROM customer_devices cd
+                          LEFT JOIN customer_locations cl ON cl.id = cd.location_id
+                          WHERE cd.is_cpc = 1
+                            AND (cd.customer_id = c.id OR cl.customer_id = c.id)
+                      )
                     ORDER BY c.name
                 """
                 customers = self.db.fetch_all(query, (f"%{filter_text}%",))
@@ -407,8 +419,13 @@ class CPCTab(QWidget):
                 query = """
                     SELECT DISTINCT c.id, c.name
                     FROM customers c
-                    JOIN customer_devices cd ON c.id = cd.customer_id
-                    WHERE cd.is_cpc = 1
+                    WHERE EXISTS (
+                        SELECT 1
+                        FROM customer_devices cd
+                        LEFT JOIN customer_locations cl ON cl.id = cd.location_id
+                        WHERE cd.is_cpc = 1
+                          AND (cd.customer_id = c.id OR cl.customer_id = c.id)
+                    )
                     ORDER BY c.name
                 """
                 customers = self.db.fetch_all(query)
@@ -463,12 +480,14 @@ class CPCTab(QWidget):
             return
         try:
             query = """
-                SELECT id, device_model, serial_number, color_type
-                FROM customer_devices 
-                WHERE customer_id = ? AND is_cpc = 1
-                ORDER BY device_model
+                SELECT DISTINCT cd.id, cd.device_model, cd.serial_number, cd.color_type
+                FROM customer_devices cd
+                LEFT JOIN customer_locations cl ON cl.id = cd.location_id
+                WHERE cd.is_cpc = 1
+                  AND (cd.customer_id = ? OR cl.customer_id = ?)
+                ORDER BY cd.device_model
             """
-            devices = self.db.fetch_all(query, (self.selected_customer_id,))
+            devices = self.db.fetch_all(query, (self.selected_customer_id, self.selected_customer_id))
             self.devices_table.setRowCount(len(devices))
             for row, device in enumerate(devices):
                 self.devices_table.setItem(row, 0, QTableWidgetItem(str(device['id'])))
@@ -514,6 +533,7 @@ class CPCTab(QWidget):
             
     def show_compatible_products(self, product_type='all'):
         """Seçili cihaza uyumlu ürünleri gösterir."""
+        self.current_product_type = product_type
         if product_type == 'spare_part':
             # Modelden bağımsız olarak tüm yedek parçaları göster
             query = """
@@ -589,6 +609,30 @@ class CPCTab(QWidget):
                                     'sale_currency': match['sale_currency']
                                 })
                             break  # Found a match, no need to check other terms for this item
+
+                # Eşleşme tanımlanmamış tonerler için arama fallback'i
+                search_text = self.product_filter.text().strip()
+                if search_text and product_type in ('toner', 'all'):
+                    toner_query = """
+                        SELECT id, item_type, name, part_number, quantity, sale_price, sale_currency, supplier, description
+                        FROM stock_items
+                        WHERE item_type = 'Toner'
+                          AND quantity > 0
+                          AND (LOWER(name) LIKE ? OR LOWER(part_number) LIKE ?)
+                    """
+                    search_param = f"%{search_text.lower()}%"
+                    toner_search_matches = self.db.fetch_all(toner_query, (search_param, search_param))
+                    for match in toner_search_matches:
+                        if not any(item['part_number'] == match['part_number'] for item in all_compatible):
+                            all_compatible.append({
+                                'name': match['name'],
+                                'part_number': match['part_number'],
+                                'item_type': match['item_type'],
+                                'description': match['description'] or "Arama sonucu toner",
+                                'supplier': match['supplier'],
+                                'sale_price': match['sale_price'],
+                                'sale_currency': match['sale_currency']
+                            })
             except Exception as e:
                 log_error("CPCTab", e)
                 return
@@ -947,6 +991,10 @@ class CPCTab(QWidget):
     def filter_products_table(self):
         """Ürün tablosunu filtreler."""
         filter_text = self.product_filter.text().lower()
+
+        # Toner aramasını eşleşme dışı ürünler için DB fallback ile destekle
+        if self.selected_device_id and filter_text and self.current_product_type in ('toner', 'all'):
+            self.show_compatible_products(self.current_product_type)
         
         for row in range(self.products_table.rowCount()):
             should_show = True

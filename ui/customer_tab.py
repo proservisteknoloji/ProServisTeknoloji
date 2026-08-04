@@ -774,6 +774,7 @@ class CustomerDeviceTab(QWidget):
                 'device_model': device_info['device_model'],
                 'serial_number': device_info['serial_number'],
                 'source_person': device_info['customer_name'],
+                'customer_id': device_info.get('customer_id'),
                 'acquisition_date': date_input.text().strip(),
                 'purchase_price': float(price_input.text() or 0),
                 'sale_price': float(sale_price_input.text() or 0),
@@ -784,12 +785,12 @@ class CustomerDeviceTab(QWidget):
             # 2. el tablosuna ekle
             self.db.execute_query(
                 """
-                INSERT INTO second_hand_devices 
-                (device_model, serial_number, source_person, acquisition_date, purchase_price, sale_price, status, notes)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO second_hand_devices
+                (device_model, serial_number, source_person, customer_id, acquisition_date, purchase_price, sale_price, status, notes)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
-                    data['device_model'], data['serial_number'], data['source_person'],
+                    data['device_model'], data['serial_number'], data['source_person'], data['customer_id'],
                     data['acquisition_date'], data['purchase_price'], data['sale_price'],
                     data['status'], data['notes']
                 )

@@ -1,0 +1,6 @@
+C:\Users\umits\Desktop\ProservisProje_web_compile\ProservisAgent_Release\Proservis.Agent.Desktop.exe
+C:\Users\umits\Desktop\ProservisProje_web_compile\ProservisAgent_Release\Proservis.Agent.Desktop.dll
+C:\Users\umits\Desktop\ProservisProje_web_compile\ProservisAgent_Release\Proservis.Agent.Desktop.deps.json
+C:\Users\umits\Desktop\ProservisProje_web_compile\ProservisAgent_Release\Proservis.Agent.Desktop.runtimeconfig.json
+C:\Users\umits\Desktop\ProservisProje_web_compile\ProservisAgent_Release\Proservis.Agent.Desktop.pdb
+C:\Users\umits\Desktop\ProservisProje_web_compile\ProservisAgent_Release\SharpSnmpLib.dll
