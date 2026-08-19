@@ -687,7 +687,7 @@ private fun WorkList(
             val isDeliveryTask = !isMeterGroup && !isServiceGroup
             val primaryActionLabel = when {
                 isOpenPool -> "İşi Sahiplen"
-                isServiceGroup -> "Arıza Servis Girişi"
+                isServiceGroup -> "Servise Başla"
                 isMeterGroup -> "Sayaç Gir ve Kaydet"
                 else -> "Görev / Teslim Ekranı"
             }

@@ -16,6 +16,7 @@ import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -28,14 +29,25 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -47,6 +59,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
@@ -60,12 +73,11 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 
-private val TopBarColor = Color(0xFF00897B)
-private val PageBgColor = Color(0xFFE5E5E5)
-private val ActionButtonColor = Color(0xFF6E6E6E)
+private val PageBgColor = Color(0xFFF8FAFC)
+private val TopBarGradient = listOf(Color(0xFF1E3A8A), Color(0xFF2563EB))
 private val OverlayShade = Color(0x99000000)
 private val ScanBorderColor = Color(0xFFF4F4F4)
-private val ScanLineColor = Color(0x99FF3B30)
+private val ScanLineColor = Color(0xCCEF4444)
 
 @Composable
 fun SerialVerifyRoute(
@@ -105,18 +117,26 @@ fun SerialVerifyRoute(
             .fillMaxSize()
             .background(PageBgColor),
     ) {
+        // Modern TopBar with Proservis Gradient
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(TopBarColor)
-                .padding(horizontal = 14.dp, vertical = 16.dp),
+                .background(Brush.horizontalGradient(TopBarGradient))
+                .padding(horizontal = 8.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            IconButton(onClick = onBack) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = "Geri",
+                    tint = Color.White
+                )
+            }
             Text(
                 text = "Seri No Doğrulama",
                 color = Color.White,
-                fontSize = 22.sp,
-                fontWeight = FontWeight.SemiBold,
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Bold,
             )
         }
 
@@ -124,113 +144,195 @@ fun SerialVerifyRoute(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(14.dp)
-                .background(Color.White)
-                .border(1.dp, Color(0xFFCDCDCD), RoundedCornerShape(2.dp))
-                .padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+                .padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
+            // Quick Bypass Button
             Button(
                 onClick = { viewModel.verifyAnyAndProceed() },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(44.dp),
+                    .height(48.dp),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = Color(0xFF00897B),
+                    containerColor = Color(0xFF0D9488),
                     contentColor = Color.White
                 ),
-                shape = RoundedCornerShape(6.dp)
+                shape = RoundedCornerShape(12.dp)
             ) {
                 Text(
-                    text = "⚡ Sayaç Okuma / Seri No Doğrulamadan Geç",
+                    text = "⚡ Doğrulamayı Atla ve Servise Başla",
                     fontWeight = FontWeight.Bold,
                     fontSize = 14.sp
                 )
             }
 
-            Text("Servis ID: ${state.serviceId}", style = MaterialTheme.typography.bodySmall)
-            Text("Kamera önizlemesi açık kalır. OCR sadece Oku butonuna bastığınızda tek kare için çalışır.")
-
-            if (state.cameraPermissionGranted) {
-                LiveSerialScanner(
-                    onCanScan = viewModel::canScan,
-                    onScanStarted = viewModel::beginProcessing,
-                    onScanFinished = viewModel::finishProcessing,
-                    onFrameResult = viewModel::onOcrResult,
-                )
-            } else {
-                Text(
-                    text = "Kamera izni olmadan tarama yapılamaz.",
-                    color = MaterialTheme.colorScheme.error,
-                )
-                ActionButton(
-                    label = "KAMERA IZNINI VER",
-                    enabled = !state.loading,
-                    onClick = { permissionLauncher.launch(Manifest.permission.CAMERA) },
-                )
+            // Info Card
+            Card(
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFFF1F5F9)),
+                border = BorderStroke(1.dp, Color(0xFFE2E8F0)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(12.dp)) {
+                    Text(
+                        text = "Kamerayı cihaz üzerindeki seri no etiketine hizalayın ve 'Kameradan Oku' butonuna basın.",
+                        fontSize = 12.sp,
+                        color = Color(0xFF475569),
+                        fontWeight = FontWeight.Medium
+                    )
+                }
             }
 
-            Text(
-                text = state.statusMessage,
-                style = MaterialTheme.typography.bodySmall,
-                color = if (state.isProcessing) Color(0xFF1565C0) else Color(0xFF5F6368),
-            )
+            // Camera Area Card
+            Card(
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = Color.White),
+                border = BorderStroke(1.dp, Color(0xFFE2E8F0)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(
+                    modifier = Modifier.padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    if (state.cameraPermissionGranted) {
+                        LiveSerialScanner(
+                            onCanScan = viewModel::canScan,
+                            onScanStarted = viewModel::beginProcessing,
+                            onScanFinished = viewModel::finishProcessing,
+                            onFrameResult = viewModel::onOcrResult,
+                        )
+                    } else {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(200.dp)
+                                .background(Color(0xFFF8FAFC), RoundedCornerShape(12.dp))
+                                .border(1.dp, Color(0xFFCBD5E1), RoundedCornerShape(12.dp)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Text(
+                                    text = "Kamera izni gereklidir.",
+                                    color = MaterialTheme.colorScheme.error,
+                                    fontWeight = FontWeight.Medium
+                                )
+                                Button(
+                                    onClick = { permissionLauncher.launch(Manifest.permission.CAMERA) },
+                                    shape = RoundedCornerShape(8.dp)
+                                ) {
+                                    Text("Kamera İzni Ver")
+                                }
+                            }
+                        }
+                    }
 
-            if (state.scannedText.isNotBlank()) {
-                Text(
-                    text = "Okunan seri no: ${state.scannedText}",
-                    color = Color(0xFF1565C0),
-                    fontWeight = FontWeight.SemiBold,
-                )
+                    // Scanned result badge
+                    if (state.scannedText.isNotBlank()) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(Color(0xFFEFF6FF), RoundedCornerShape(10.dp))
+                                .border(1.dp, Color(0xFFBFDBFE), RoundedCornerShape(10.dp))
+                                .padding(10.dp)
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Icon(Icons.Default.CheckCircle, contentDescription = null, tint = Color(0xFF2563EB), modifier = Modifier.size(18.dp))
+                                Text(
+                                    text = "Okunan: ${state.scannedText}",
+                                    color = Color(0xFF1E40AF),
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 14.sp
+                                )
+                            }
+                        }
+                    }
+
+                    Text(
+                        text = state.statusMessage,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (state.isProcessing) Color(0xFF2563EB) else Color(0xFF64748B),
+                    )
+                }
             }
 
-            if (state.debugOcrText.isNotBlank()) {
-                Text(
-                    text = "OCR debug: ${state.debugOcrText}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Color(0xFF616161),
-                )
+            // Input Field Card
+            Card(
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = Color.White),
+                border = BorderStroke(1.dp, Color(0xFFE2E8F0)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(
+                    modifier = Modifier.padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    OutlinedTextField(
+                        value = state.inputValue,
+                        onValueChange = viewModel::onInputChanged,
+                        label = { Text("Seri No / Son Haneler") },
+                        supportingText = { Text("Kameradan okunan değer buraya yazılır veya manuel girebilirsiniz.", fontSize = 11.sp) },
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Button(
+                            onClick = viewModel::requestScan,
+                            enabled = state.cameraPermissionGranted && !state.loading && !state.isProcessing,
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2563EB)),
+                            modifier = Modifier
+                                .weight(1.3f)
+                                .height(48.dp),
+                        ) {
+                            if (state.isProcessing) {
+                                CircularProgressIndicator(color = Color.White, strokeWidth = 2.dp, modifier = Modifier.size(18.dp))
+                                Spacer(Modifier.width(6.dp))
+                            } else {
+                                Icon(Icons.Default.CameraAlt, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(Modifier.width(6.dp))
+                            }
+                            Text(if (state.isProcessing) "Okunuyor..." else "Kameradan Oku", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                        }
+
+                        OutlinedButton(
+                            onClick = viewModel::clearScanResult,
+                            enabled = !state.loading && !state.isProcessing,
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier
+                                .weight(0.7f)
+                                .height(48.dp),
+                        ) {
+                            Text("Temizle", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                        }
+                    }
+
+                    Button(
+                        onClick = viewModel::verify,
+                        enabled = !state.loading && !state.isProcessing,
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF16A34A)),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(52.dp),
+                    ) {
+                        if (state.loading) {
+                            CircularProgressIndicator(color = Color.White, strokeWidth = 2.dp, modifier = Modifier.size(20.dp))
+                            Spacer(Modifier.width(8.dp))
+                        }
+                        Text("Doğrula ve Servise Başla", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                    }
+                }
             }
-
-            OutlinedTextField(
-                value = state.inputValue,
-                onValueChange = viewModel::onInputChanged,
-                label = { Text("Seri no / son haneler") },
-                supportingText = { Text("Okunan sonuç otomatik buraya yazılır. İsterseniz manuel düzenleyebilirsiniz.") },
-                modifier = Modifier.fillMaxWidth(),
-            )
-
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                ActionButton(
-                    label = if (state.isProcessing) "OKUNUYOR..." else "OKU",
-                    enabled = state.cameraPermissionGranted && !state.loading && !state.isProcessing,
-                    onClick = viewModel::requestScan,
-                    loading = state.isProcessing,
-                    modifier = Modifier.weight(1f),
-                )
-                ActionButton(
-                    label = "TEMIZLE",
-                    enabled = !state.loading && !state.isProcessing,
-                    onClick = viewModel::clearScanResult,
-                    modifier = Modifier.weight(1f),
-                )
-            }
-
-            ActionButton(
-                label = "DOGRULA",
-                enabled = !state.loading && !state.isProcessing,
-                onClick = viewModel::verify,
-                loading = state.loading,
-            )
-
-            ActionButton(
-                label = "GERI",
-                enabled = !state.loading,
-                onClick = onBack,
-            )
 
             state.errorMessage?.takeIf { it.isNotBlank() }?.let {
-                Text(it, color = MaterialTheme.colorScheme.error)
+                Text(it, color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(horizontal = 4.dp))
             }
         }
     }
@@ -423,35 +525,5 @@ private fun vibrateSuccess(context: android.content.Context) {
             @Suppress("DEPRECATION")
             vibrator.vibrate(80L)
         }
-    }
-}
-
-@Composable
-private fun ActionButton(
-    label: String,
-    enabled: Boolean,
-    onClick: () -> Unit,
-    loading: Boolean = false,
-    modifier: Modifier = Modifier,
-) {
-    Button(
-        onClick = onClick,
-        enabled = enabled,
-        modifier = modifier
-            .fillMaxWidth()
-            .height(52.dp),
-        shape = RoundedCornerShape(0.dp),
-        colors = ButtonDefaults.buttonColors(
-            containerColor = ActionButtonColor,
-            contentColor = Color.White,
-            disabledContainerColor = Color(0xFFA9A9A9),
-            disabledContentColor = Color.White,
-        ),
-    ) {
-        if (loading) {
-            CircularProgressIndicator(color = Color.White, strokeWidth = 2.dp)
-            Spacer(modifier = Modifier.width(8.dp))
-        }
-        Text(label)
     }
 }
