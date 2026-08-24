@@ -1,0 +1,42 @@
+{
+  "runtimeTarget": {
+    "name": ".NETCoreApp,Version=v10.0/win-x64",
+    "signature": ""
+  },
+  "compilationOptions": {},
+  "targets": {
+    ".NETCoreApp,Version=v10.0": {},
+    ".NETCoreApp,Version=v10.0/win-x64": {
+      "Proservis.Agent.Desktop/1.0.0": {
+        "dependencies": {
+          "SharpSnmpLib": "10.0.0-beta1"
+        },
+        "runtime": {
+          "Proservis.Agent.Desktop.dll": {}
+        }
+      },
+      "SharpSnmpLib/10.0.0-beta1": {
+        "runtime": {
+          "lib/netstandard1.3/SharpSnmpLib.dll": {
+            "assemblyVersion": "10.0.0.0",
+            "fileVersion": "10.0.0.0"
+          }
+        }
+      }
+    }
+  },
+  "libraries": {
+    "Proservis.Agent.Desktop/1.0.0": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
+    },
+    "SharpSnmpLib/10.0.0-beta1": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-5b1H3oVyLYmqHACEvnhDtWdDDAP96g3TfLvsj5ubdMzK9NH4oq1zrgXc9JuyYMUlMHoaJycWh8jP4s+vXMyI/A==",
+      "path": "sharpsnmplib/10.0.0-beta1",
+      "hashPath": "sharpsnmplib.10.0.0-beta1.nupkg.sha512"
+    }
+  }
+}

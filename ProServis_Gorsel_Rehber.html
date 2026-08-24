@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ProServis — Adım Adım Açıklamalı Sistem & Modül Rehberi</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0f172a;
+      --card-bg: #1e293b;
+      --primary: #3b82f6;
+      --text: #f8fafc;
+      --text-muted: #94a3b8;
+      --border: #334155;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Inter', sans-serif;
+      background-color: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      padding: 24px;
+    }
+    header {
+      text-align: center;
+      max-width: 1000px;
+      margin: 0 auto 32px auto;
+      padding: 24px;
+      background: linear-gradient(135deg, rgba(30, 41, 59, 0.7), rgba(15, 23, 42, 0.9));
+      border: 1px solid var(--border);
+      border-radius: 16px;
+    }
+    header h1 {
+      font-size: 28px;
+      font-weight: 800;
+      color: #60a5fa;
+      margin-bottom: 8px;
+    }
+    header p {
+      color: var(--text-muted);
+      font-size: 15px;
+    }
+    .badge {
+      display: inline-block;
+      background: #2563eb;
+      color: #fff;
+      font-size: 12px;
+      font-weight: 700;
+      padding: 4px 12px;
+      border-radius: 20px;
+      margin-bottom: 12px;
+      text-transform: uppercase;
+    }
+    .container {
+      max-width: 1100px;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 32px;
+    }
+    .step-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      overflow: hidden;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.3);
+    }
+    .card-header {
+      padding: 16px 20px;
+      background: rgba(15, 23, 42, 0.6);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .step-num {
+      font-size: 13px;
+      font-weight: 700;
+      color: #38bdf8;
+      background: rgba(56, 189, 248, 0.1);
+      padding: 4px 10px;
+      border-radius: 6px;
+      border: 1px solid rgba(56, 189, 248, 0.2);
+    }
+    .step-title {
+      font-size: 17px;
+      font-weight: 700;
+      color: #f1f5f9;
+    }
+    .card-body {
+      padding: 20px;
+    }
+    .info-box {
+      background: rgba(30, 41, 59, 0.9);
+      border-left: 4px solid var(--primary);
+      padding: 12px 16px;
+      border-radius: 0 8px 8px 0;
+      margin-bottom: 16px;
+      font-size: 14px;
+      color: #cbd5e1;
+    }
+    .info-box b {
+      color: #60a5fa;
+    }
+    .tip {
+      color: #34d399;
+      font-size: 13px;
+      margin-top: 6px;
+    }
+    .image-container img {
+      width: 100%;
+      height: auto;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      display: block;
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="badge">ProServis Rehber Serisi</div>
+    <h1>1. Görev: Açıklamalı Müşteri & Cihaz Tanıtım Kılavuzu</h1>
+    <p>Sisteme giriş, müşteri ekleme, cihaz yönetimi, sözleşmeler ve servis süreçleri her adımda ekranda gösterilen bilgi notlarıyla hazırlanmıştır.</p>
+  </header>
+
+  <div class="container">
+
+    <div class="step-card">
+      <div class="card-header">
+        <span class="step-num">ADIM 1</span>
+        <h3 class="step-title">Sisteme Giriş (Login)</h3>
+      </div>
+      <div class="card-body">
+        <div class="info-box">
+          <b>📌 Bilgi & Not:</b> Sisteme giriş yapmak için kayıtlı e-posta ve şifrenizi girerek 'Giriş Yap' butonuna tıklayın.
+          <div class="tip">💡 Kullanıcı adı: <code>demo@demo.com.tr</code> | Şifre: <code>demo1234</code></div>
+        </div>
+        <div class="image-container">
+          <img src="login_page_with_banner_1787173671888.png" alt="Adım 1 Giriş">
+        </div>
+      </div>
+    </div>
+
+    <div class="step-card">
+      <div class="card-header">
+        <span class="step-num">ADIM 2</span>
+        <h3 class="step-title">Ana Panel & Menü Seçimi</h3>
+      </div>
+      <div class="card-body">
+        <div class="info-box">
+          <b>📌 Bilgi & Not:</b> Üst menüden <b>Müşteri & Cihaz</b> menüsüne tıklayarak Müşteri Listesi veya Cihazlar ekranına geçin.
+        </div>
+        <div class="image-container">
+          <img src="dashboard_step_2_1787173704223.png" alt="Adım 2 Panel">
+        </div>
+      </div>
+    </div>
+
+    <div class="step-card">
+      <div class="card-header">
+        <span class="step-num">ADIM 3</span>
+        <h3 class="step-title">Müşteri Listesi & Arama</h3>
+      </div>
+      <div class="card-body">
+        <div class="info-box">
+          <b>📌 Bilgi & Not:</b> Kayıtlı müşterilerinizi arama çubuğu ve filtreler ile listeleyip yönetebilirsiniz.
+        </div>
+        <div class="image-container">
+          <img src="customers_list_step_3_1787173918292.png" alt="Adım 3 Müşteri Listesi">
+        </div>
+      </div>
+    </div>
+
+    <div class="step-card">
+      <div class="card-header">
+        <span class="step-num">ADIM 4</span>
+        <h3 class="step-title">Yeni Müşteri Kaydı (Modal)</h3>
+      </div>
+      <div class="card-body">
+        <div class="info-box">
+          <b>📌 Bilgi & Not:</b> Bu pencereden unvan, şube, adres, vergi dairesi/VKN ve iletişim bilgilerini girerek yeni müşteri kaydedebilirsiniz.
+        </div>
+        <div class="image-container">
+          <img src="new_customer_modal_step_4_1787173961355.png" alt="Adım 4 Yeni Müşteri">
+        </div>
+      </div>
+    </div>
+
+    <div class="step-card">
+      <div class="card-header">
+        <span class="step-num">ADIM 5</span>
+        <h3 class="step-title">Cihaz Yönetimi & Envanter</h3>
+      </div>
+      <div class="card-body">
+        <div class="info-box">
+          <b>📌 Bilgi & Not:</b> Müşterilerinize ait cihazları (marka, model, seri numarası, sayaç ve durum bilgileriyle) bu ekrandan listeleyip filtreleyebilirsiniz.
+        </div>
+        <div class="image-container">
+          <img src="devices_page_step_5_1787174043789.png" alt="Adım 5 Cihaz Yönetimi">
+        </div>
+      </div>
+    </div>
+
+    <div class="step-card">
+      <div class="card-header">
+        <span class="step-num">ADIM 6</span>
+        <h3 class="step-title">Sözleşmeler & Kopyabaşı Yönetimi</h3>
+      </div>
+      <div class="card-body">
+        <div class="info-box">
+          <b>📌 Bilgi & Not:</b> Müşterilerinizle yaptığınız bakım/kiralama sözleşmelerini ve kopyabaşı birim fiyat tanımlarını buradan yönetebilirsiniz.
+        </div>
+        <div class="image-container">
+          <img src="contracts_page_step_6_1787174085168.png" alt="Adım 6 Sözleşmeler">
+        </div>
+      </div>
+    </div>
+
+    <div class="step-card">
+      <div class="card-header">
+        <span class="step-num">ADIM 7</span>
+        <h3 class="step-title">Müşteri Talepleri</h3>
+      </div>
+      <div class="card-body">
+        <div class="info-box">
+          <b>📌 Bilgi & Not:</b> Müşterilerinizin portal üzerinden ilettiği servis, toner veya diğer talepleri bu ekrandan takip edip işleme alabilirsiniz.
+        </div>
+        <div class="image-container">
+          <img src="requests_page_step_7_1787174150697.png" alt="Adım 7 Talepler">
+        </div>
+      </div>
+    </div>
+
+    <div class="step-card">
+      <div class="card-header">
+        <span class="step-num">ADIM 8</span>
+        <h3 class="step-title">Servis Yönetimi & İş Emri</h3>
+      </div>
+      <div class="card-body">
+        <div class="info-box">
+          <b>📌 Bilgi & Not:</b> Tüm teknik servis kayıtlarını, iş emirlerini, teknisyen atamalarını ve arıza detaylarını bu ekrandan yönetip güncelleyebilirsiniz.
+        </div>
+        <div class="image-container">
+          <img src="service_page_step_8_1787174205071.png" alt="Adım 8 Servis">
+        </div>
+      </div>
+    </div>
+
+    <div class="step-card">
+      <div class="card-header">
+        <span class="step-num">ADIM 9</span>
+        <h3 class="step-title">Yedek Parça & Toner Stoğu</h3>
+      </div>
+      <div class="card-body">
+        <div class="info-box">
+          <b>📌 Bilgi & Not:</b> Stoktaki yedek parçaları, tonerleri, parça hareketlerini ve kritik stok seviyelerini buradan takip edebilirsiniz.
+        </div>
+        <div class="image-container">
+          <img src="stock_page_step_9_1787174257969.png" alt="Adım 9 Stok">
+        </div>
+      </div>
+    </div>
+
+    <div class="step-card">
+      <div class="card-header">
+        <span class="step-num">ADIM 10</span>
+        <h3 class="step-title">Tedarik & Sipariş Yönetimi</h3>
+      </div>
+      <div class="card-body">
+        <div class="info-box">
+          <b>📌 Bilgi & Not:</b> Satın alma taleplerini, parça siparişlerini, tedarikçi siparişlerini ve durum takibini bu ekran üzerinden kolayca gerçekleştirebilirsiniz.
+        </div>
+        <div class="image-container">
+          <img src="order_page_step_10_1787174304070.png" alt="Adım 10 Sipariş">
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+</body>
+</html>
