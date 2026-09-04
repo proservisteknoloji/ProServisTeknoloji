@@ -28,6 +28,7 @@ import javax.inject.Inject
 data class CompleteServiceUiState(
     val serviceId: String = "",
     val jobType: String = "service",
+    val serviceReason: String = "",
     val title: String = "",
     val customerName: String = "",
     val locationText: String = "",
@@ -49,10 +50,36 @@ data class CompleteServiceUiState(
     val errorMessage: String? = null,
     val success: Boolean = false,
 ) {
+    val isDeviceReplacement: Boolean
+        get() = jobType == "device_replacement" || serviceReason.contains("DEĞİŞİM", ignoreCase = true) || serviceReason.contains("DEGISIM", ignoreCase = true)
+
+    val isDeviceDelivery: Boolean
+        get() = jobType == "device_delivery" || serviceReason.contains("TESLİMAT", ignoreCase = true) || serviceReason.contains("TESLIMAT", ignoreCase = true) || serviceReason.contains("MONTAJ", ignoreCase = true)
+
+    val isDevicePickup: Boolean
+        get() = jobType == "device_pickup" || serviceReason.contains("ALIM", ignoreCase = true)
+
+    val isTonerDelivery: Boolean
+        get() = jobType == "toner_delivery" || serviceReason.contains("TONER", ignoreCase = true)
+
+    val isProductTransfer: Boolean
+        get() = jobType == "product_transfer" || serviceReason.contains("ÜRÜN", ignoreCase = true) || serviceReason.contains("URUN", ignoreCase = true)
+
+    val isRemoteSupport: Boolean
+        get() = jobType == "remote_support" || serviceReason.contains("UZAK", ignoreCase = true)
+
+    val isMaintenance: Boolean
+        get() = jobType == "maintenance" || serviceReason.contains("BAKIM", ignoreCase = true)
+
+    val isPartReplacement: Boolean
+        get() = jobType == "part_replacement" || serviceReason.contains("PARÇA", ignoreCase = true) || serviceReason.contains("PARCA", ignoreCase = true)
+
     val isServiceJob: Boolean
-        get() = jobType == "service" || jobType == "maintenance" || jobType == "part_replacement" || jobType == "bakim" || jobType == "parca_degisimi"
+        get() = jobType == "service" || isMaintenance || isPartReplacement || isDeviceReplacement
+
     val isDeliveryJob: Boolean
-        get() = jobType == "toner_delivery" || jobType == "product_transfer" || jobType == "device_delivery" || jobType == "cihaz_teslimati"
+        get() = isTonerDelivery || isProductTransfer || isDeviceDelivery || isDevicePickup
+
     val isSimpleTask: Boolean
         get() = !isServiceJob && !isDeliveryJob
 }
@@ -62,6 +89,7 @@ class CompleteServiceViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val sessionStore: SessionStore,
     private val completeServiceUseCase: CompleteServiceUseCase,
+    private val workRepository: com.proservis.technician.data.work.WorkRepository,
     private val db: FirebaseFirestore,
     private val storage: FirebaseStorage,
 ) : ViewModel() {
@@ -173,6 +201,35 @@ class CompleteServiceViewModel @Inject constructor(
         }
     }
 
+    fun uploadReportFromUri(context: android.content.Context, uri: android.net.Uri) {
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            runCatching {
+                val resolver = context.contentResolver
+                val mimeType = resolver.getType(uri) ?: "image/jpeg"
+                val ext = if (mimeType.contains("pdf")) "pdf" else "jpg"
+                val name = "servis_formu_${System.currentTimeMillis()}.$ext"
+                val bytes = resolver.openInputStream(uri)?.use { it.readBytes() } ?: return@launch
+                uploadReport(name, mimeType, bytes)
+            }.onFailure { err ->
+                _uiState.update { it.copy(reportUploadError = "Dosya okunamadi: ${err.message}") }
+            }
+        }
+    }
+
+    fun uploadReportBitmap(bitmap: android.graphics.Bitmap) {
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            runCatching {
+                val stream = java.io.ByteArrayOutputStream()
+                bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 85, stream)
+                val bytes = stream.toByteArray()
+                val name = "kamera_form_${System.currentTimeMillis()}.jpg"
+                uploadReport(name, "image/jpeg", bytes)
+            }.onFailure { err ->
+                _uiState.update { it.copy(reportUploadError = "Fotograf islenemedi: ${err.message}") }
+            }
+        }
+    }
+
     fun submitWithStatus(targetStatus: String) {
         _uiState.update { it.copy(status = targetStatus) }
         submit()
@@ -213,6 +270,15 @@ class CompleteServiceViewModel @Inject constructor(
                 _uiState.update { it.copy(errorMessage = "Yeni renkli sayac son okunan degerden kucuk olamaz.") }
                 return
             }
+        } else {
+            if (bw != null && lastBw != null && bw < lastBw) {
+                _uiState.update { it.copy(errorMessage = "Yeni S/B sayac son okunan degerden kucuk olamaz.") }
+                return
+            }
+            if (color != null && lastColor != null && color < lastColor) {
+                _uiState.update { it.copy(errorMessage = "Yeni renkli sayac son okunan degerden kucuk olamaz.") }
+                return
+            }
         }
 
         viewModelScope.launch {
@@ -224,7 +290,7 @@ class CompleteServiceViewModel @Inject constructor(
             }
 
             val finalStatus = when {
-                isDeliveryJob -> "Delivery"
+                isDeliveryJob -> "Delivered"
                 current.isSimpleTask -> "Repaired"
                 else -> current.status.ifBlank { "Repaired" }
             }
@@ -232,14 +298,15 @@ class CompleteServiceViewModel @Inject constructor(
             val data = ServiceCompletionData(
                 status = finalStatus,
                 technicianReport = if (report.isBlank() && isDeliveryJob) "Teslim bilgisi girildi" else report,
-                bwCounter = if (isServiceJob) bw else null,
-                colorCounter = if (isServiceJob && current.isColorDevice) color else null,
+                bwCounter = bw,
+                colorCounter = color,
                 deliveryRecipientName = current.deliveryRecipientName.trim().ifBlank { null },
             )
 
             runCatching {
                 completeServiceUseCase(session.tenantId, serviceId, session.uid, data)
             }.onSuccess {
+                workRepository.markLocallyCompleted(serviceId)
                 _uiState.update { it.copy(loading = false, success = true) }
             }.onFailure { err ->
                 _uiState.update { it.copy(loading = false, errorMessage = "Tamamlama hatasi: ${err.message ?: "Bilinmeyen"}") }
@@ -252,6 +319,7 @@ class CompleteServiceViewModel @Inject constructor(
             val session = sessionStore.sessionFlow.firstOrNull() ?: return@launch
             val snap = db.document("tenants/${session.tenantId}/service_records/$serviceId").get().await()
             if (!snap.exists()) return@launch
+            val serviceReason = snap.getString("serviceReason") ?: snap.getString("service_reason") ?: ""
             val jobType = inferJobType(snap)
             val currentBw = (snap.get("bwCounter") as? Number)?.toLong()?.toString()
             val currentColor = (snap.get("colorCounter") as? Number)?.toLong()?.toString()
@@ -296,12 +364,17 @@ class CompleteServiceViewModel @Inject constructor(
             _uiState.update {
                 it.copy(
                     jobType = jobType,
+                    serviceReason = serviceReason,
                     title = deviceModel.ifBlank {
                         when (jobType) {
                             "toner_delivery" -> "Toner Teslimi"
-                            "product_transfer" -> "Urun Teslimi"
-                            "misc" -> "Muhtelif Is"
-                            else -> "Servis Kaydi"
+                            "product_transfer" -> "Ürün Teslimatı"
+                            "device_delivery" -> "Cihaz Teslimatı & Montaj"
+                            "device_pickup" -> "Cihaz Alımı"
+                            "device_replacement" -> "Cihaz Değişimi"
+                            "remote_support" -> "Uzak Bağlantı & Kurulum"
+                            "misc" -> "Muhtelif İş"
+                            else -> "Servis Kaydı"
                         }
                     },
                     customerName = customerName,
@@ -340,8 +413,9 @@ class CompleteServiceViewModel @Inject constructor(
         if (direct in setOf("toner_delivery", "tonerdelivery")) return "toner_delivery"
         if (direct in setOf("product_transfer", "producttransfer")) return "product_transfer"
         if (direct in setOf("device_pickup", "devicepickup", "cihaz_alimi")) return "device_pickup"
-        if (direct in setOf("device_delivery", "devicedelivery", "cihaz_teslimati")) return "device_delivery"
+        if (direct in setOf("device_delivery", "devicedelivery", "cihaz_teslimati", "cihaz_teslimati_montaj")) return "device_delivery"
         if (direct in setOf("device_replacement", "devicereplacement", "cihaz_degisimi")) return "device_replacement"
+        if (direct in setOf("remote_support", "remotesupport", "uzak_baglanti")) return "remote_support"
         if (direct in setOf("cargo_shipping", "cargoshipping", "kargo_gonderimi")) return "cargo_shipping"
         if (direct in setOf("misc")) return "misc"
         if (direct in setOf("service", "service_assignment")) return "service"
@@ -352,18 +426,27 @@ class CompleteServiceViewModel @Inject constructor(
             token in setOf("metercollection", "sayacokuma", "sayactoplama", "sayacgorevi") ||
                 normalized.contains("sayac") ||
                 normalized.contains("meter") -> "meter_collection"
-            normalized in setOf("service", "service_assignment", "ariza", "fault") -> "service"
-            normalized.contains("bakim") || normalized.contains("parca") -> "service"
-            token in setOf("cihazalimi", "devicepickup") ||
-                normalized in setOf("cihaz alimi", "device_pickup") -> "device_pickup"
-            token in setOf("cihazteslimati", "devicedelivery") ||
-                normalized in setOf("cihaz teslimati", "device_delivery") -> "device_delivery"
             token in setOf("cihazdegisimi", "devicereplacement") ||
+                normalized.contains("degisim") ||
                 normalized in setOf("cihaz degisimi", "device_replacement") -> "device_replacement"
+            token in setOf("cihazalimi", "devicepickup") ||
+                normalized.contains("alimi") ||
+                normalized in setOf("cihaz alimi", "device_pickup") -> "device_pickup"
+            token in setOf("cihazteslimati", "devicedelivery", "cihazteslimatimontaj", "montaj") ||
+                normalized.contains("teslimat") ||
+                normalized.contains("montaj") ||
+                normalized in setOf("cihaz teslimati", "device_delivery", "cihaz teslimati & montaj") -> "device_delivery"
+            token in setOf("uzakbaglanti", "remotesupport", "programkurulusu") ||
+                normalized.contains("uzak") ||
+                normalized.contains("kurulum") -> "remote_support"
+            token in setOf("tonerteslimi", "tonerdelivery", "tonerteslimati") ||
+                normalized.contains("toner") -> "toner_delivery"
             token in setOf("kargogonderimi", "cargoshipping") ||
-                normalized in setOf("kargo gonderimi", "cargo_shipping") -> "cargo_shipping"
-            token in setOf("tonerteslimi", "tonerdelivery") ||
-                normalized in setOf("toner_delivery", "toner teslimi") -> "toner_delivery"
+                normalized.contains("kargo") -> "cargo_shipping"
+            normalized.contains("bakim") -> "maintenance"
+            normalized.contains("parca") -> "part_replacement"
+            normalized in setOf("service", "service_assignment", "ariza", "fault") ||
+                normalized.contains("ariza") -> "service"
             token in setOf("urunteslimi", "producttransfer", "urunalis") ||
                 normalized in setOf("urun teslimi", "urun teslimati", "urun alimi", "product_transfer") -> "product_transfer"
             normalized in setOf("misc", "muhtelif") -> "misc"

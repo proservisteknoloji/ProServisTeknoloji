@@ -132,18 +132,30 @@ private fun isMeterLikeRow(row: WorkItem): Boolean {
     if (row.source == WorkSource.METER_TASK) return true
     val rawJobType = row.jobType.orEmpty().trim()
     if (rawJobType.equals("meter_collection", ignoreCase = true)) return true
-    if (canonicalJobType(rawJobType) == "meter_collection") return true
+    val cType = canonicalJobType(rawJobType)
+    if (cType == "meter_collection") return true
 
-    val rawTitle = row.title.orEmpty()
-    val rawDesc = row.problemDescription.orEmpty()
+    if (row.source == WorkSource.SERVICE) {
+        if (cType in setOf(
+                "device_replacement",
+                "service",
+                "maintenance",
+                "part_replacement",
+                "device_delivery",
+                "device_pickup",
+                "toner_delivery",
+                "product_transfer",
+                "cargo_shipping",
+                "remote_support",
+                "misc"
+            )
+        ) {
+            return false
+        }
+    }
 
-    val normTitle = normalizeWorkText(rawTitle)
-    val normDesc = normalizeWorkText(rawDesc)
-
-    return normTitle.contains("sayac") ||
-        normTitle.contains("meter") ||
-        normDesc.contains("sayac") ||
-        normDesc.contains("meter")
+    val normTitle = normalizeWorkText(row.title)
+    return normTitle.contains("sayac okuma") || normTitle.contains("meter collection")
 }
 
 private fun canonicalJobType(value: String?): String {
@@ -154,8 +166,9 @@ private fun canonicalJobType(value: String?): String {
     if (direct in setOf("toner_delivery", "tonerdelivery")) return "toner_delivery"
     if (direct in setOf("product_transfer", "producttransfer")) return "product_transfer"
     if (direct in setOf("device_pickup", "devicepickup", "cihaz_alimi")) return "device_pickup"
-    if (direct in setOf("device_delivery", "devicedelivery", "cihaz_teslimati")) return "device_delivery"
+    if (direct in setOf("device_delivery", "devicedelivery", "cihaz_teslimati", "cihaz_teslimati_montaj")) return "device_delivery"
     if (direct in setOf("device_replacement", "devicereplacement", "cihaz_degisimi")) return "device_replacement"
+    if (direct in setOf("remote_support", "remotesupport", "uzak_baglanti")) return "remote_support"
     if (direct in setOf("cargo_shipping", "cargoshipping", "kargo_gonderimi")) return "cargo_shipping"
     if (direct in setOf("misc")) return "misc"
     if (direct in setOf("service", "service_assignment")) return "service"
@@ -163,21 +176,31 @@ private fun canonicalJobType(value: String?): String {
     val normalized = normalizeWorkText(value)
     val token = normalized.replace(Regex("[^a-z0-9]"), "")
     return when {
-        token in setOf("metercollection", "sayacokuma", "sayactoplama", "sayacgorevi") ||
-            normalized.contains("sayac") ||
-            normalized.contains("meter") -> "meter_collection"
-        normalized in setOf("service", "service_assignment", "ariza", "fault") -> "service"
-        normalized.contains("bakim") || normalized.contains("parca") -> "service"
-        token in setOf("cihazalimi", "devicepickup") ||
-            normalized in setOf("cihaz alimi", "device_pickup") -> "device_pickup"
-        token in setOf("cihazteslimati", "devicedelivery") ||
-            normalized in setOf("cihaz teslimati", "device_delivery") -> "device_delivery"
         token in setOf("cihazdegisimi", "devicereplacement") ||
+            normalized.contains("degisim") ||
             normalized in setOf("cihaz degisimi", "device_replacement") -> "device_replacement"
+        token in setOf("cihazalimi", "devicepickup") ||
+            normalized.contains("alimi") ||
+            normalized in setOf("cihaz alimi", "device_pickup") -> "device_pickup"
+        token in setOf("cihazteslimati", "devicedelivery", "cihazteslimatimontaj", "montaj") ||
+            normalized.contains("teslimat") ||
+            normalized.contains("montaj") ||
+            normalized in setOf("cihaz teslimati", "device_delivery", "cihaz teslimati & montaj") -> "device_delivery"
+        token in setOf("uzakbaglanti", "remotesupport", "programkurulusu") ||
+            normalized.contains("uzak") ||
+            normalized.contains("kurulum") -> "remote_support"
+        token in setOf("tonerteslimi", "tonerdelivery", "tonerteslimati") ||
+            normalized.contains("toner") -> "toner_delivery"
         token in setOf("kargogonderimi", "cargoshipping") ||
-            normalized in setOf("kargo gonderimi", "cargo_shipping") -> "cargo_shipping"
-        token in setOf("tonerteslimi", "tonerdelivery") ||
-            normalized in setOf("toner_delivery", "toner teslimi") -> "toner_delivery"
+            normalized.contains("kargo") -> "cargo_shipping"
+        normalized.contains("bakim") -> "maintenance"
+        normalized.contains("parca") -> "part_replacement"
+        token in setOf("metercollection", "sayacokuma", "sayactoplama", "sayacgorevi") ||
+            normalized.contains("sayac okuma") ||
+            normalized.contains("sayac gorevi") ||
+            token == "sayac" || token == "meter" -> "meter_collection"
+        normalized in setOf("service", "service_assignment", "ariza", "fault") ||
+            normalized.contains("ariza") -> "service"
         token in setOf("urunteslimi", "producttransfer", "urunalis") ||
             normalized in setOf("urun teslimi", "urun teslimati", "urun alimi", "product_transfer") -> "product_transfer"
         normalized in setOf("misc", "muhtelif") -> "misc"
@@ -190,9 +213,12 @@ private fun jobTypeLabel(jobType: String?): String {
     return when (canonicalJobType(jobType)) {
         "meter_collection" -> "Sayaç Okuma"
         "service" -> "Arıza Servis"
+        "maintenance" -> "Periyodik Bakım"
+        "part_replacement" -> "Parça Değişimi"
         "device_pickup" -> "Cihaz Alımı"
-        "device_delivery" -> "Cihaz Teslimatı"
+        "device_delivery" -> "Cihaz Teslimatı & Montaj"
         "device_replacement" -> "Cihaz Değişimi"
+        "remote_support" -> "Uzak Bağlantı & Kurulum"
         "cargo_shipping" -> "Kargo Gönderimi"
         "toner_delivery" -> "Toner Teslimi"
         "product_transfer" -> "Ürün Teslimatı"
@@ -204,6 +230,21 @@ private fun jobTypeLabel(jobType: String?): String {
                 word.replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale("tr", "TR")) else it.toString() }
             }
         }
+    }
+}
+
+private fun jobTypeBadgeColors(jobType: String?): Pair<Color, Color> {
+    return when (canonicalJobType(jobType)) {
+        "service" -> Color(0xFFFEE2E2) to Color(0xFFDC2626) // Kırmızı (Arıza)
+        "maintenance" -> Color(0xFFD1FAE5) to Color(0xFF059669) // Yeşil (Bakım)
+        "device_replacement" -> Color(0xFFF3E8FF) to Color(0xFF7E22CE) // Mor (Cihaz Değişimi)
+        "device_delivery" -> Color(0xFFECFDF5) to Color(0xFF047857) // Zümrüt (Teslimat & Montaj)
+        "device_pickup" -> Color(0xFFE0E7FF) to Color(0xFF3730A3) // İndigo (Cihaz Alımı)
+        "toner_delivery" -> Color(0xFFE0F2FE) to Color(0xFF0369A1) // Açık Mavi (Toner Teslimi)
+        "part_replacement" -> Color(0xFFFEF3C7) to Color(0xFFD97706) // Amber (Parça Değişimi)
+        "remote_support" -> Color(0xFFEDE9FE) to Color(0xFF6D28D9) // Menekşe (Uzak Bağlantı)
+        "meter_collection" -> Color(0xFFCFFAFE) to Color(0xFF0891B2) // Camgöbeği (Sayaç)
+        else -> Color(0xFFF1F5F9) to Color(0xFF475569) // Gri (Muhtelif)
     }
 }
 
@@ -683,7 +724,7 @@ private fun WorkList(
         items(rows, key = { it.source.name + it.id }) { row ->
             val isMeterGroup = isMeterLikeRow(row)
             val jobTypeCanonical = canonicalJobType(row.jobType)
-            val isServiceGroup = row.source == WorkSource.SERVICE && !isMeterGroup && jobTypeCanonical == "service"
+            val isServiceGroup = row.source == WorkSource.SERVICE && !isMeterGroup && (jobTypeCanonical in setOf("service", "maintenance", "part_replacement", "device_replacement", "remote_support"))
             val isDeliveryTask = !isMeterGroup && !isServiceGroup
             val primaryActionLabel = when {
                 isOpenPool -> "İşi Sahiplen"
@@ -700,34 +741,43 @@ private fun WorkList(
                     .padding(14.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                Text(
-                    text = row.customerName,
-                    fontWeight = FontWeight.Bold,
-                    style = MaterialTheme.typography.titleMedium,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = row.customerName,
+                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.titleMedium,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f)
+                    )
+                    val (badgeBg, badgeText) = jobTypeBadgeColors(if (isMeterGroup) "meter_collection" else row.jobType)
+                    val displayJobType = if (isMeterGroup) "Sayaç Okuma" else jobTypeLabel(row.jobType)
+                    Box(
+                        modifier = Modifier
+                            .background(badgeBg, RoundedCornerShape(6.dp))
+                            .padding(horizontal = 8.dp, vertical = 3.dp)
+                    ) {
+                        Text(
+                            text = displayJobType,
+                            color = badgeText,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                        )
+                    }
+                }
 
                 if (row.locationText.isNotBlank()) {
-                    DetailLine(text = "Konum: ${row.locationText}")
+                    DetailLine(text = "📍 Konum: ${row.locationText}")
                 }
 
-                if (row.source == WorkSource.SERVICE || isMeterGroup) {
-                    val displayJobType = when {
-                        isMeterGroup -> "Sayaç Okuma"
-                        else -> jobTypeLabel(row.jobType)
-                    }
-                    DetailLine(text = "Is Tipi: $displayJobType")
+                DetailLine(text = "🖨️ Cihaz: ${row.title}")
+                if (!row.serialNumber.isNullOrBlank()) {
+                    DetailLine(text = "🔢 Seri No: ${row.serialNumber}")
                 }
-
-                val deviceText = buildString {
-                    append(row.title)
-                    if ((row.jobType == null || row.jobType == "service") && !row.serialNumber.isNullOrBlank()) {
-                        append(" - ")
-                        append(row.serialNumber)
-                    }
-                }
-                DetailLine(text = if (row.jobType == null || row.jobType == "service") "Cihaz: $deviceText" else "Kayit: $deviceText")
 
                 if (!row.problemDescription.isNullOrBlank()) {
                     Box(
@@ -965,7 +1015,7 @@ private fun SmallActionIconButton(
     }
 }
 
-private data class CustomerDeviceItem(
+internal data class CustomerDeviceItem(
     val id: String,
     val model: String,
     val serialNumber: String,

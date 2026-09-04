@@ -39,9 +39,11 @@ class WorkTabsViewModel @Inject constructor(
     private val markArrivedUseCase: MarkArrivedUseCase,
     private val completeMeterTaskUseCase: CompleteMeterTaskUseCase,
     private val locationReporter: LocationReporter,
+    private val workRepository: com.proservis.technician.data.work.WorkRepository,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(WorkTabsUiState())
     val uiState: StateFlow<WorkTabsUiState> = _uiState.asStateFlow()
+    private val optimisticallyCompletedIds = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
     private var locationRequestListener: ListenerRegistration? = null
     private var lastHandledLocationRequestAtMs: Long = 0L
 
@@ -128,8 +130,8 @@ class WorkTabsViewModel @Inject constructor(
                         _uiState.update {
                             it.copy(
                                 loading = false,
-                                openPoolItems = open,
-                                myItems = mine,
+                                openPoolItems = open.filterNot { item -> optimisticallyCompletedIds.contains(item.id) },
+                                myItems = mine.filterNot { item -> optimisticallyCompletedIds.contains(item.id) },
                                 session = effectiveSession,
                             )
                         }
@@ -272,8 +274,30 @@ class WorkTabsViewModel @Inject constructor(
         }
     }
 
+    fun markItemCompletedLocally(id: String) {
+        optimisticallyCompletedIds.add(id)
+        workRepository.markLocallyCompleted(id)
+        _uiState.update { state ->
+            state.copy(
+                myItems = state.myItems.filterNot { it.id == id },
+                openPoolItems = state.openPoolItems.filterNot { it.id == id },
+            )
+        }
+    }
+
     fun claim(item: WorkItem) {
         val session = _uiState.value.session ?: return
+        val claimedItem = item.copy(
+            technicianId = session.uid,
+            technicianName = session.technicianName,
+            status = "Assigned",
+        )
+        _uiState.update { state ->
+            state.copy(
+                openPoolItems = state.openPoolItems.filterNot { it.id == item.id },
+                myItems = if (state.myItems.none { it.id == item.id }) listOf(claimedItem) + state.myItems else state.myItems,
+            )
+        }
         runAction(item.id) {
             claimWorkUseCase(
                 tenantId = session.tenantId,
@@ -287,6 +311,17 @@ class WorkTabsViewModel @Inject constructor(
 
     fun release(item: WorkItem) {
         val session = _uiState.value.session ?: return
+        val releasedItem = item.copy(
+            technicianId = null,
+            technicianName = null,
+            status = "Received",
+        )
+        _uiState.update { state ->
+            state.copy(
+                myItems = state.myItems.filterNot { it.id == item.id },
+                openPoolItems = if (state.openPoolItems.none { it.id == item.id }) listOf(releasedItem) + state.openPoolItems else state.openPoolItems,
+            )
+        }
         runAction(item.id) {
             releaseWorkUseCase(
                 tenantId = session.tenantId,
@@ -311,6 +346,7 @@ class WorkTabsViewModel @Inject constructor(
 
     fun completeMeterTask(item: WorkItem, bwCounter: Int?, colorCounter: Int?, note: String?) {
         val session = _uiState.value.session ?: return
+        markItemCompletedLocally(item.id)
         if (item.source == WorkSource.METER_TASK) {
             runAction(item.id) {
                 completeMeterTaskUseCase(
@@ -322,13 +358,13 @@ class WorkTabsViewModel @Inject constructor(
                     note = note,
                 )
                 // Tamamlanan görevin bağlı service_records kaydını da güncelle:
-                // technician_tasks belgesinde serviceRecordId varsa bwCounter/colorCounter yaz
                 runCatching {
                     val taskSnap = db.document("tenants/${session.tenantId}/technician_tasks/${item.id}").get().await()
                     val serviceRecordId = taskSnap.getString("serviceRecordId")
                         ?: taskSnap.getString("parentServiceId")
                         ?: taskSnap.getString("serviceId")
                     if (!serviceRecordId.isNullOrBlank()) {
+                        markItemCompletedLocally(serviceRecordId)
                         val serviceUpdates = mutableMapOf<String, Any?>(
                             "technicianReport" to (note ?: "Sayaç okuma tamamlandı"),
                             "status" to "Repaired",
@@ -362,6 +398,9 @@ class WorkTabsViewModel @Inject constructor(
     fun updateServiceStatus(item: WorkItem, newStatus: String) {
         val session = _uiState.value.session ?: return
         if (item.source != WorkSource.SERVICE) return
+        if (newStatus == "Repaired" || newStatus == "Delivered" || newStatus == "Closed") {
+            markItemCompletedLocally(item.id)
+        }
         runAction(item.id) {
             val updates = mutableMapOf<String, Any>(
                 "status" to newStatus,
