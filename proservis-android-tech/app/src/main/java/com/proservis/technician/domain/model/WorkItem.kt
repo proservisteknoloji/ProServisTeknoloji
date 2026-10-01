@@ -26,4 +26,6 @@ data class WorkItem(
     val priority: String?,
     val createdAtEpochMs: Long?,
     val selectedMeterDeviceIds: List<String>? = null,
+    val isArrived: Boolean = false,
+    val arrivedAtEpochMs: Long? = null,
 )

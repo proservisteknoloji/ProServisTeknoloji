@@ -11,6 +11,7 @@ data class WorkTabsUiState(
     val locationRequestNonce: Int = 0,
     val openPoolItems: List<WorkItem> = emptyList(),
     val myItems: List<WorkItem> = emptyList(),
+    val arrivedItemIds: Set<String> = emptySet(),
     val actionBusyId: String? = null,
     val errorMessage: String? = null,
 )

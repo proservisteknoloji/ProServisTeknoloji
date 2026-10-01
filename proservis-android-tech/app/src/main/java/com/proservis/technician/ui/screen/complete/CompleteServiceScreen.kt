@@ -6,51 +6,31 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
+import androidx.compose.material.icons.outlined.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
-
-private val PageBgColor = Color(0xFFF8FAFC)
+import com.proservis.technician.ui.components.StitchCounterDeltaBadge
+import com.proservis.technician.ui.components.StitchStatusBadge
+import com.proservis.technician.ui.theme.*
 
 @Composable
 fun CompleteServiceRoute(
@@ -83,81 +63,84 @@ fun CompleteServiceRoute(
         if (state.success) onSuccess()
     }
 
-    val topBarGradient = when {
-        state.isDeviceReplacement -> listOf(Color(0xFF6B21A8), Color(0xFF9333EA)) // Mor
-        state.isDeviceDelivery -> listOf(Color(0xFF065F46), Color(0xFF059669)) // Zümrüt Yeşili
-        state.isDevicePickup -> listOf(Color(0xFF312E81), Color(0xFF4F46E5)) // İndigo
-        state.isTonerDelivery -> listOf(Color(0xFF0369A1), Color(0xFF0284C7)) // Açık Mavi
-        state.isMaintenance -> listOf(Color(0xFF047857), Color(0xFF10B981)) // Bakım Yeşili
-        state.isPartReplacement -> listOf(Color(0xFFB45309), Color(0xFFD97706)) // Amber
-        state.isRemoteSupport -> listOf(Color(0xFF4C1D95), Color(0xFF7C3AED)) // Menekşe
-        else -> listOf(Color(0xFF1E3A8A), Color(0xFF2563EB)) // Koyu Mavi
-    }
-
     val pageTitle = when {
-        state.isDeviceReplacement -> "Cihaz Değişimi Formu"
+        state.isDeviceReplacement -> "Cihaz Değişimi Detayı"
         state.isDeviceDelivery -> "Cihaz Teslimat & Montaj"
         state.isDevicePickup -> "Cihaz Geri Alma Formu"
-        state.isTonerDelivery -> "Toner Teslim Formu"
-        state.isProductTransfer -> "Ürün Teslim Formu"
-        state.isMaintenance -> "Periyodik Bakım Formu"
-        state.isPartReplacement -> "Parça Değişimi Formu"
-        state.isRemoteSupport -> "Uzak Bağlantı Formu"
-        state.isSimpleTask -> "Görev Tamamlama"
-        else -> "Arıza Servis Formu"
+        state.isTonerDelivery -> "Sarf / Toner Teslimat Detayı"
+        state.isProductTransfer -> "Ürün Teslimat Detayı"
+        state.isMaintenance -> "Bakım Servis Detayı"
+        state.isPartReplacement -> "Parça Değişimi Servisi"
+        state.isRemoteSupport -> "Uzak Destek / Kurulum"
+        state.isSimpleTask -> "Görev Detayı ve Tamamlama"
+        else -> "Arıza Servis Detayı"
     }
 
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(PageBgColor),
+            .background(Surface)
+            .statusBarsPadding()
+            .navigationBarsPadding(),
     ) {
-        // Modern Dinamik TopBar
+        // TopBar (Stitch Standardı)
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(Brush.horizontalGradient(topBarGradient))
-                .padding(horizontal = 8.dp, vertical = 12.dp),
+                .background(Surface)
+                .padding(horizontal = 12.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             IconButton(onClick = onBack) {
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                     contentDescription = "Geri",
-                    tint = Color.White
+                    tint = OnSurface
                 )
             }
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = pageTitle,
-                    color = Color.White,
-                    fontSize = 18.sp,
+                    color = OnSurface,
+                    fontSize = 17.sp,
                     fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
                 if (state.serviceReason.isNotBlank()) {
                     Text(
                         text = state.serviceReason,
-                        color = Color.White.copy(alpha = 0.85f),
+                        color = OnSurfaceVariant,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Medium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
             }
+            StitchStatusBadge(
+                text = if (state.isDeliveryJob) "Teslimat" else "İşlemde",
+                dotColor = if (state.isDeliveryJob) Secondary else PrimaryContainer,
+                containerColor = SurfaceContainerHigh,
+                contentColor = OnSurface
+            )
         }
 
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .weight(1f, fill = false)
+                .weight(1f)
                 .verticalScroll(rememberScrollState())
-                .padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+                .padding(horizontal = 16.dp, vertical = 6.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             // Müşteri & Cihaz Bilgi Kartı
             Card(
                 shape = RoundedCornerShape(14.dp),
-                colors = CardDefaults.cardColors(containerColor = Color.White),
-                border = BorderStroke(1.dp, Color(0xFFE2E8F0)),
+                colors = CardDefaults.cardColors(containerColor = SurfaceContainerLowest),
+                border = BorderStroke(1.dp, OutlineVariant.copy(alpha = 0.4f)),
+                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Column(
@@ -167,65 +150,257 @@ fun CompleteServiceRoute(
                     Text(
                         text = state.customerName.ifBlank { "Müşteri Belirtilmemiş" },
                         fontWeight = FontWeight.Bold,
-                        fontSize = 15.sp,
-                        color = Color(0xFF1E293B)
+                        fontSize = 16.sp,
+                        color = OnSurface
                     )
                     if (state.locationText.isNotBlank()) {
-                        Text(
-                            text = "📍 Lokasyon: ${state.locationText}",
-                            fontSize = 12.sp,
-                            color = Color(0xFF64748B)
-                        )
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Icon(Icons.Outlined.LocationOn, contentDescription = null, tint = Secondary, modifier = Modifier.size(16.dp))
+                            Text(
+                                text = state.locationText,
+                                fontSize = 12.sp,
+                                color = OnSurfaceVariant
+                            )
+                        }
                     }
-                    Text(
-                        text = "🖨️ Cihaz: ${state.title}",
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = Color(0xFF334155)
-                    )
-                    if (!state.serialNumber.isNullOrBlank()) {
-                        Text(
-                            text = "Seri No: ${state.serialNumber}",
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = Color(0xFF475569)
-                        )
+                    HorizontalDivider(color = SurfaceContainerLow, thickness = 1.dp, modifier = Modifier.padding(vertical = 4.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(Icons.Outlined.Print, contentDescription = null, tint = PrimaryContainer, modifier = Modifier.size(18.dp))
+                            Text(
+                                text = state.title,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = OnSurface
+                            )
+                        }
+                        if (!state.serialNumber.isNullOrBlank()) {
+                            Text(
+                                text = "SN: ${state.serialNumber}",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = OnSurfaceVariant
+                            )
+                        }
                     }
                 }
             }
 
-            // Bildirilen Arıza / Talep Tanımı
+            // Bildirilen Sorun / Talep Kutusu
             if (!state.problemDescription.isNullOrBlank()) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(Color(0xFFFFFBEB), RoundedCornerShape(12.dp))
-                        .border(1.dp, Color(0xFFFDE68A), RoundedCornerShape(12.dp))
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(SurfaceContainerLow)
                         .padding(14.dp)
                 ) {
-                    Column {
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text(
-                            text = "BİLDİRİLEN ARIZA / TALEP:",
+                            text = "BİLDİRİLEN ARIZA / TALEP ÖZETİ",
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
-                            color = Color(0xFFB45309)
+                            color = OrangeWarning,
+                            letterSpacing = 0.5.sp
                         )
                         Text(
                             text = state.problemDescription.orEmpty(),
                             fontSize = 13.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = Color(0xFF1E293B),
-                            modifier = Modifier.padding(top = 4.dp)
+                            fontWeight = FontWeight.Medium,
+                            color = OnSurface,
+                            lineHeight = 18.sp
                         )
                     }
                 }
             }
 
-            // 📸 Servis Formu / Fotoğraf Yükleme Bölümü
+            // Teslim Kalemleri Listesi (Eğer Teslimat / Sarf işi ise)
+            if (state.deliveryItems.isNotEmpty()) {
+                Card(
+                    shape = RoundedCornerShape(14.dp),
+                    colors = CardDefaults.cardColors(containerColor = SurfaceContainerLowest),
+                    border = BorderStroke(1.dp, OutlineVariant.copy(alpha = 0.4f)),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier.padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Icon(Icons.Outlined.Inventory2, contentDescription = null, tint = PrimaryContainer, modifier = Modifier.size(18.dp))
+                                Text("Teslim Edilecek Malzemeler", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = OnSurface)
+                            }
+                            Text("${state.deliveryItems.size} Kalem", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = PrimaryContainer)
+                        }
+
+                        state.deliveryItems.forEach { item ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(SurfaceContainerLow)
+                                    .padding(10.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = item,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = OnSurface,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                Icon(Icons.Outlined.CheckCircle, contentDescription = "Hazır", tint = GreenSuccess, modifier = Modifier.size(18.dp))
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Sayaç Bilgileri Bölümü (Stitch Delta Hesaplamalı)
             Card(
                 shape = RoundedCornerShape(14.dp),
-                colors = CardDefaults.cardColors(containerColor = Color.White),
-                border = BorderStroke(1.dp, Color(0xFFE2E8F0)),
+                colors = CardDefaults.cardColors(containerColor = SurfaceContainerLowest),
+                border = BorderStroke(1.dp, OutlineVariant.copy(alpha = 0.4f)),
+                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(
+                    modifier = Modifier.padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Icon(Icons.Outlined.Speed, contentDescription = null, tint = PrimaryContainer, modifier = Modifier.size(18.dp))
+                            Text(
+                                text = if (state.isDeliveryJob) "Sayaç Bilgileri (Opsiyonel)" else "Sayaç Bilgileri",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 14.sp,
+                                color = OnSurface
+                            )
+                        }
+                    }
+
+                    // S/B Sayaç
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(if (state.isServiceJob) "Siyah / Beyaz Sayaç *" else "S/B Sayaç", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = OnSurface)
+                            Text("Önceki: ${state.lastBwCounter ?: "-"}", fontSize = 11.sp, color = OnSurfaceVariant)
+                        }
+                        OutlinedTextField(
+                            value = state.bwCounter,
+                            onValueChange = viewModel::onBwCounterChanged,
+                            placeholder = { Text("Yeni S/B Sayaç Değeri") },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true,
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedContainerColor = SurfaceContainerLowest,
+                                unfocusedContainerColor = SurfaceContainerLow
+                            )
+                        )
+                        StitchCounterDeltaBadge(
+                            oldCounter = state.lastBwCounter?.toIntOrNull(),
+                            newCounter = state.bwCounter.toIntOrNull()
+                        )
+                    }
+
+                    // Renkli Sayaç
+                    if (state.isColorDevice) {
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(if (state.isServiceJob) "Renkli Sayaç (Color) *" else "Renkli Sayaç", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = OnSurface)
+                                Text("Önceki: ${state.lastColorCounter ?: "-"}", fontSize = 11.sp, color = OnSurfaceVariant)
+                            }
+                            OutlinedTextField(
+                                value = state.colorCounter,
+                                onValueChange = viewModel::onColorCounterChanged,
+                                placeholder = { Text("Yeni Renkli Sayaç Değeri") },
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                shape = RoundedCornerShape(10.dp),
+                                modifier = Modifier.fillMaxWidth(),
+                                singleLine = true,
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedContainerColor = SurfaceContainerLowest,
+                                    unfocusedContainerColor = SurfaceContainerLow
+                                )
+                            )
+                            StitchCounterDeltaBadge(
+                                oldCounter = state.lastColorCounter?.toIntOrNull(),
+                                newCounter = state.colorCounter.toIntOrNull()
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Teslim Alan Kişi Bilgisi (Sadece Ad Soyad - Telefon ve imza yok)
+            if (state.isDeliveryJob || state.isDeviceDelivery || state.isDeviceReplacement || state.isDevicePickup) {
+                Card(
+                    shape = RoundedCornerShape(14.dp),
+                    colors = CardDefaults.cardColors(containerColor = SurfaceContainerLowest),
+                    border = BorderStroke(1.dp, OutlineVariant.copy(alpha = 0.4f)),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier.padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Icon(Icons.Outlined.Badge, contentDescription = null, tint = PrimaryContainer, modifier = Modifier.size(18.dp))
+                            Text("Teslim Alan Yetkili Bilgisi", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = OnSurface)
+                        }
+
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text("Teslim Alan Adı Soyadı *", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = OnSurface)
+                            OutlinedTextField(
+                                value = state.deliveryRecipientName,
+                                onValueChange = viewModel::onDeliveryRecipientChanged,
+                                placeholder = { Text("Örn: Ahmet Yılmaz") },
+                                singleLine = true,
+                                shape = RoundedCornerShape(10.dp),
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedContainerColor = SurfaceContainerLowest,
+                                    unfocusedContainerColor = SurfaceContainerLow
+                                )
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Fotoğraf & Servis Formu Yükleme
+            Card(
+                shape = RoundedCornerShape(14.dp),
+                colors = CardDefaults.cardColors(containerColor = SurfaceContainerLowest),
+                border = BorderStroke(1.dp, OutlineVariant.copy(alpha = 0.4f)),
+                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Column(
@@ -237,27 +412,14 @@ fun CompleteServiceRoute(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(
-                            text = "📎 Servis Formu & Fotoğraf",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 14.sp,
-                            color = Color(0xFF1E293B)
-                        )
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Icon(Icons.Outlined.CameraAlt, contentDescription = null, tint = PrimaryContainer, modifier = Modifier.size(18.dp))
+                            Text("Servis Fotoğrafı / Formu", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = OnSurface)
+                        }
                         if (!state.reportFileName.isNullOrBlank()) {
-                            Text(
-                                text = "✓ Form Eklendi",
-                                color = Color(0xFF16A34A),
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 12.sp
-                            )
+                            Text("✓ Eklendi", color = GreenSuccess, fontWeight = FontWeight.Bold, fontSize = 12.sp)
                         }
                     }
-
-                    Text(
-                        text = "İmzalı servis formunu veya işlem fotoğrafını ekleyebilirsiniz.",
-                        fontSize = 12.sp,
-                        color = Color(0xFF64748B)
-                    )
 
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -267,22 +429,22 @@ fun CompleteServiceRoute(
                             onClick = { cameraLauncher.launch(null) },
                             enabled = !state.reportUploadInProgress && !state.loading,
                             shape = RoundedCornerShape(10.dp),
-                            modifier = Modifier.weight(1f).height(44.dp),
-                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF0284C7)),
-                            border = BorderStroke(1.dp, Color(0xFFBAE6FD))
+                            modifier = Modifier.weight(1f).height(46.dp),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = PrimaryContainer),
+                            border = BorderStroke(1.dp, PrimaryContainer.copy(alpha = 0.4f))
                         ) {
-                            Text("📷 Fotoğraf Çek", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                            Text("📷 Fotoğraf Çek", fontWeight = FontWeight.Bold, fontSize = 12.sp)
                         }
 
                         OutlinedButton(
                             onClick = { fileLauncher.launch("image/*") },
                             enabled = !state.reportUploadInProgress && !state.loading,
                             shape = RoundedCornerShape(10.dp),
-                            modifier = Modifier.weight(1f).height(44.dp),
-                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF4F46E5)),
-                            border = BorderStroke(1.dp, Color(0xFFC7D2FE))
+                            modifier = Modifier.weight(1f).height(46.dp),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Secondary),
+                            border = BorderStroke(1.dp, Secondary.copy(alpha = 0.4f))
                         ) {
-                            Text("📁 Dosya Seç", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                            Text("📁 Dosya Seç", fontWeight = FontWeight.Bold, fontSize = 12.sp)
                         }
                     }
 
@@ -292,265 +454,87 @@ fun CompleteServiceRoute(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.Center
                         ) {
-                            CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                            CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = PrimaryContainer)
                             Spacer(Modifier.width(8.dp))
-                            Text("Form yükleniyor...", fontSize = 12.sp, color = Color(0xFF2563EB))
+                            Text("Yükleniyor...", fontSize = 12.sp, color = PrimaryContainer)
                         }
                     }
 
                     if (!state.reportFileName.isNullOrBlank()) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .background(Color(0xFFF0FDF4), RoundedCornerShape(8.dp))
-                                .border(1.dp, Color(0xFFBBF7D0), RoundedCornerShape(8.dp))
-                                .padding(8.dp)
-                        ) {
-                            Text(
-                                text = "📄 ${state.reportFileName}",
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Medium,
-                                color = Color(0xFF15803D)
-                            )
-                        }
+                        Text("Yüklenen Dosya: ${state.reportFileName}", fontSize = 12.sp, color = Tertiary, fontWeight = FontWeight.Medium)
                     }
 
                     if (!state.reportUploadError.isNullOrBlank()) {
-                        Text(
-                            text = state.reportUploadError.orEmpty(),
-                            color = MaterialTheme.colorScheme.error,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Medium
-                        )
+                        Text(state.reportUploadError.orEmpty(), color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
                     }
                 }
             }
 
-            // Rapor & Sayaç & Teslim Kartı
+            // Yapılan İşlemler / Teknisyen Açıklaması
             Card(
                 shape = RoundedCornerShape(14.dp),
-                colors = CardDefaults.cardColors(containerColor = Color.White),
-                border = BorderStroke(1.dp, Color(0xFFE2E8F0)),
+                colors = CardDefaults.cardColors(containerColor = SurfaceContainerLowest),
+                border = BorderStroke(1.dp, OutlineVariant.copy(alpha = 0.4f)),
+                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Column(
                     modifier = Modifier.padding(14.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    // Yapılan İşlemler / Açıklama
+                    Text(
+                        text = if (state.isDeliveryJob) "Teslimat Notu / Açıklama" else "Yapılan İşlemler / Rapor *",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 13.sp,
+                        color = OnSurface
+                    )
                     OutlinedTextField(
                         value = state.report,
                         onValueChange = viewModel::onReportChanged,
+                        placeholder = { Text(if (state.isDeliveryJob) "Teslim edildi, irsaliye no vb." else "Yapılan onarım, değişen parçalar vb.") },
+                        minLines = 3,
+                        shape = RoundedCornerShape(10.dp),
                         modifier = Modifier.fillMaxWidth(),
-                        label = {
-                            Text(
-                                when {
-                                    state.isDeliveryJob -> "Teslim Notu / Açıklama"
-                                    state.isSimpleTask -> "Yapılan İşlem / Açıklama"
-                                    else -> "Yapılan İşlemler / Teknisyen Açıklaması *"
-                                }
-                            )
-                        },
-                        shape = RoundedCornerShape(12.dp),
-                        minLines = if (state.isServiceJob) 4 else 3,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedContainerColor = SurfaceContainerLowest,
+                            unfocusedContainerColor = SurfaceContainerLow
+                        )
                     )
+                }
+            }
 
-                    // Teslim Alan Kişi (Teslimat veya Değişim durumlarında)
-                    if (state.isDeliveryJob || state.isDeviceDelivery || state.isDeviceReplacement || state.isDevicePickup) {
-                        if (state.deliveryItems.isNotEmpty()) {
-                            Text("Teslim Kalemleri", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
-                            state.deliveryItems.forEach { item ->
-                                Text("• $item", style = MaterialTheme.typography.bodySmall, color = Color(0xFF475569))
-                            }
-                        }
-                        OutlinedTextField(
-                            value = state.deliveryRecipientName,
-                            onValueChange = viewModel::onDeliveryRecipientChanged,
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(12.dp),
-                            label = { Text("Teslim Alan Kişi (Ad Soyad)") },
-                        )
-                    }
+            if (!state.errorMessage.isNullOrBlank()) {
+                Text(
+                    text = state.errorMessage.orEmpty(),
+                    color = MaterialTheme.colorScheme.error,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 13.sp,
+                    modifier = Modifier.padding(horizontal = 4.dp)
+                )
+            }
 
-                    // Sayaç Girişi (Servis, Bakım, Değişim, Toner Teslimi vb.)
-                    if (state.isServiceJob || state.isDevicePickup || state.isDeviceDelivery || state.isTonerDelivery) {
-                        Text(
-                            if (state.isTonerDelivery) "Sayaç Bilgileri (Opsiyonel)" else "Sayaç Bilgileri",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 13.sp,
-                            color = Color(0xFF1E293B)
-                        )
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            OutlinedTextField(
-                                value = state.lastBwCounter ?: "-",
-                                onValueChange = {},
-                                enabled = false,
-                                modifier = Modifier.weight(1f),
-                                shape = RoundedCornerShape(12.dp),
-                                label = { Text("Eski S/B") },
-                            )
-                            OutlinedTextField(
-                                value = state.bwCounter,
-                                onValueChange = viewModel::onBwCounterChanged,
-                                modifier = Modifier.weight(1f),
-                                shape = RoundedCornerShape(12.dp),
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                label = { Text(if (state.isServiceJob) "Yeni S/B *" else "Yeni S/B") },
-                            )
-                        }
-
-                        if (state.isColorDevice) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                OutlinedTextField(
-                                    value = state.lastColorCounter ?: "-",
-                                    onValueChange = {},
-                                    enabled = false,
-                                    modifier = Modifier.weight(1f),
-                                    shape = RoundedCornerShape(12.dp),
-                                    label = { Text("Eski Renkli") },
-                                )
-                                OutlinedTextField(
-                                    value = state.colorCounter,
-                                    onValueChange = viewModel::onColorCounterChanged,
-                                    modifier = Modifier.weight(1f),
-                                    shape = RoundedCornerShape(12.dp),
-                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                    label = { Text(if (state.isServiceJob) "Yeni Renkli *" else "Yeni Renkli") },
-                                )
-                            }
-                        } else {
-                            Text("(Siyah-Beyaz Cihaz - Renkli Sayaç Pasif)", fontSize = 11.sp, color = Color.Gray)
-                        }
-                    }
-
-                    val errorMessage = state.errorMessage
-                    if (!errorMessage.isNullOrBlank()) {
-                        Text(errorMessage, color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold)
-                    }
-
-                    // Dinamik Sonuç & Kapatma Butonları
-                    if (state.isDeviceReplacement) {
-                        Button(
-                            onClick = { viewModel.submitWithStatus("Repaired") },
-                            enabled = !state.loading,
-                            modifier = Modifier.fillMaxWidth().height(50.dp),
-                            shape = RoundedCornerShape(12.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF9333EA), contentColor = Color.White),
-                        ) {
-                            if (state.loading) {
-                                CircularProgressIndicator(color = Color.White, strokeWidth = 2.dp, modifier = Modifier.size(20.dp))
-                                Spacer(Modifier.width(8.dp))
-                            }
-                            Text("✓ CİHAZ DEĞİŞİMİNİ TAMAMLA VE KAPAT", fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                        }
-                    } else if (state.isDevicePickup) {
-                        Button(
-                            onClick = { viewModel.submitWithStatus("Repaired") },
-                            enabled = !state.loading,
-                            modifier = Modifier.fillMaxWidth().height(50.dp),
-                            shape = RoundedCornerShape(12.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4F46E5), contentColor = Color.White),
-                        ) {
-                            if (state.loading) {
-                                CircularProgressIndicator(color = Color.White, strokeWidth = 2.dp, modifier = Modifier.size(20.dp))
-                                Spacer(Modifier.width(8.dp))
-                            }
-                            Text("✓ CİHAZI TESLİM ALDIM (Kapat)", fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                        }
-                    } else if (state.isMaintenance) {
-                        Button(
-                            onClick = { viewModel.submitWithStatus("Repaired") },
-                            enabled = !state.loading,
-                            modifier = Modifier.fillMaxWidth().height(50.dp),
-                            shape = RoundedCornerShape(12.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981), contentColor = Color.White),
-                        ) {
-                            if (state.loading) {
-                                CircularProgressIndicator(color = Color.White, strokeWidth = 2.dp, modifier = Modifier.size(20.dp))
-                                Spacer(Modifier.width(8.dp))
-                            }
-                            Text("✓ PERİYODİK BAKIM TAMAMLANDI", fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                        }
-                    } else if (state.isDeliveryJob) {
-                        Button(
-                            onClick = viewModel::submit,
-                            enabled = !state.loading,
-                            modifier = Modifier.fillMaxWidth().height(50.dp),
-                            shape = RoundedCornerShape(12.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0284C7), contentColor = Color.White),
-                        ) {
-                            if (state.loading) {
-                                CircularProgressIndicator(color = Color.White, strokeWidth = 2.dp, modifier = Modifier.size(20.dp))
-                                Spacer(Modifier.width(8.dp))
-                            }
-                            Text("✓ TESLİM EDİLDİ OLARAK KAYDET", fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                        }
-                    } else if (state.isServiceJob) {
-                        Text("Servis Sonuç Durumunu Seçin ve Kaydedin:", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = Color(0xFF334155), modifier = Modifier.padding(top = 4.dp))
-
-                        Button(
-                            onClick = { viewModel.submitWithStatus("Repaired") },
-                            enabled = !state.loading,
-                            modifier = Modifier.fillMaxWidth().height(50.dp),
-                            shape = RoundedCornerShape(12.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF16A34A), contentColor = Color.White),
-                        ) {
-                            if (state.loading) {
-                                CircularProgressIndicator(color = Color.White, strokeWidth = 2.dp, modifier = Modifier.size(20.dp))
-                                Spacer(Modifier.width(8.dp))
-                            }
-                            Text("✓ ARIZA GİDERİLDİ (Servisi Kapat)", fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                        }
-
-                        Button(
-                            onClick = { viewModel.submitWithStatus("Waiting Part") },
-                            enabled = !state.loading,
-                            modifier = Modifier.fillMaxWidth().height(50.dp),
-                            shape = RoundedCornerShape(12.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD97706), contentColor = Color.White),
-                        ) {
-                            Text("PARÇA DEĞİŞECEK (Parça Bekliyor)", fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                        }
-
-                        Button(
-                            onClick = { viewModel.submitWithStatus("Fault Persists") },
-                            enabled = !state.loading,
-                            modifier = Modifier.fillMaxWidth().height(50.dp),
-                            shape = RoundedCornerShape(12.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFDC2626), contentColor = Color.White),
-                        ) {
-                            Text("✕ ARIZA GİDERİLEMEDİ (Arıza Devam Ediyor)", fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                        }
-                    } else {
-                        Button(
-                            onClick = viewModel::submit,
-                            enabled = !state.loading,
-                            modifier = Modifier.fillMaxWidth().height(50.dp),
-                            shape = RoundedCornerShape(12.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2563EB), contentColor = Color.White),
-                        ) {
-                            if (state.loading) {
-                                CircularProgressIndicator(color = Color.White, strokeWidth = 2.dp, modifier = Modifier.size(20.dp))
-                                Spacer(Modifier.width(8.dp))
-                            }
-                            Text("✓ GÖREVİ TAMAMLA", fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                        }
-                    }
-
-                    OutlinedButton(
-                        onClick = onBack,
-                        enabled = !state.loading,
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.fillMaxWidth().height(48.dp),
-                    ) {
-                        Text("Geri Dön", color = Color(0xFF64748B), fontWeight = FontWeight.SemiBold)
-                    }
+            // Alt Kapatma Butonu (56dp height)
+            Button(
+                onClick = { viewModel.submit() },
+                enabled = !state.loading,
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(54.dp)
+                    .padding(bottom = 8.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = if (state.isDeliveryJob) TertiaryContainer else PrimaryContainer,
+                    contentColor = OnPrimary
+                )
+            ) {
+                if (state.loading) {
+                    CircularProgressIndicator(modifier = Modifier.size(20.dp), color = OnPrimary, strokeWidth = 2.dp)
+                } else {
+                    Text(
+                        text = if (state.isDeliveryJob) "✓ Teslimatı Onayla ve Kapat" else "✓ Servisi Tamamla ve Kapat",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 15.sp
+                    )
                 }
             }
         }

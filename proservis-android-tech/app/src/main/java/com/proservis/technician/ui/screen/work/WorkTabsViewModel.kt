@@ -10,8 +10,10 @@ import com.proservis.technician.data.session.SessionStore
 import com.proservis.technician.domain.model.UserSession
 import com.proservis.technician.domain.model.WorkItem
 import com.proservis.technician.domain.model.WorkSource
+import com.proservis.technician.domain.model.MeterReadingInput
 import com.proservis.technician.domain.usecase.ClaimWorkUseCase
 import com.proservis.technician.domain.usecase.CompleteMeterTaskUseCase
+import com.proservis.technician.domain.usecase.CompleteServiceUseCase
 import com.proservis.technician.data.location.LocationReporter
 import com.proservis.technician.domain.usecase.MarkArrivedUseCase
 import com.proservis.technician.domain.usecase.ObserveMyWorkUseCase
@@ -38,6 +40,7 @@ class WorkTabsViewModel @Inject constructor(
     private val releaseWorkUseCase: ReleaseWorkUseCase,
     private val markArrivedUseCase: MarkArrivedUseCase,
     private val completeMeterTaskUseCase: CompleteMeterTaskUseCase,
+    private val completeServiceUseCase: CompleteServiceUseCase,
     private val locationReporter: LocationReporter,
     private val workRepository: com.proservis.technician.data.work.WorkRepository,
 ) : ViewModel() {
@@ -334,7 +337,9 @@ class WorkTabsViewModel @Inject constructor(
 
     fun markArrived(item: WorkItem) {
         val session = _uiState.value.session ?: return
-        if (item.source != WorkSource.SERVICE) return
+        _uiState.update { current ->
+            current.copy(arrivedItemIds = current.arrivedItemIds + item.id)
+        }
         runAction(item.id) {
             markArrivedUseCase(
                 tenantId = session.tenantId,
@@ -344,7 +349,7 @@ class WorkTabsViewModel @Inject constructor(
         }
     }
 
-    fun completeMeterTask(item: WorkItem, bwCounter: Int?, colorCounter: Int?, note: String?) {
+    fun completeMeterTask(item: WorkItem, readings: List<MeterReadingInput>, note: String?) {
         val session = _uiState.value.session ?: return
         markItemCompletedLocally(item.id)
         if (item.source == WorkSource.METER_TASK) {
@@ -353,8 +358,7 @@ class WorkTabsViewModel @Inject constructor(
                     tenantId = session.tenantId,
                     taskId = item.id,
                     uid = session.uid,
-                    bwCounter = bwCounter,
-                    colorCounter = colorCounter,
+                    readings = readings,
                     note = note,
                 )
                 // Tamamlanan görevin bağlı service_records kaydını da güncelle:
@@ -371,8 +375,10 @@ class WorkTabsViewModel @Inject constructor(
                             "closedAt" to FieldValue.serverTimestamp(),
                             "updatedAt" to FieldValue.serverTimestamp(),
                         )
-                        bwCounter?.let { serviceUpdates["bwCounter"] = it }
-                        colorCounter?.let { serviceUpdates["colorCounter"] = it }
+                        readings.firstOrNull()?.let { reading ->
+                            serviceUpdates["bwCounter"] = reading.bwCounter
+                            serviceUpdates["colorCounter"] = reading.colorCounter ?: 0
+                        }
                         db.document("tenants/${session.tenantId}/service_records/$serviceRecordId")
                             .update(serviceUpdates)
                             .await()
@@ -381,15 +387,18 @@ class WorkTabsViewModel @Inject constructor(
             }
         } else if (item.source == WorkSource.SERVICE) {
             runAction(item.id) {
-                val updates = mutableMapOf<String, Any?>(
-                    "status" to "Repaired",
-                    "technicianReport" to (note ?: "Sayaç okuma tamamlandı"),
-                    "closedAt" to FieldValue.serverTimestamp(),
-                    "updatedAt" to FieldValue.serverTimestamp(),
+                completeServiceUseCase(
+                    tenantId = session.tenantId,
+                    serviceId = item.id,
+                    uid = session.uid,
+                    data = com.proservis.technician.domain.model.ServiceCompletionData(
+                        status = "Repaired",
+                        technicianReport = note ?: "Sayaç okuma tamamlandı",
+                        bwCounter = readings.firstOrNull()?.bwCounter,
+                        colorCounter = readings.firstOrNull()?.colorCounter,
+                        meterReadings = readings,
+                    ),
                 )
-                bwCounter?.let { updates["bwCounter"] = it }
-                colorCounter?.let { updates["colorCounter"] = it }
-                db.document("tenants/${session.tenantId}/service_records/${item.id}").update(updates).await()
             }
         }
     }

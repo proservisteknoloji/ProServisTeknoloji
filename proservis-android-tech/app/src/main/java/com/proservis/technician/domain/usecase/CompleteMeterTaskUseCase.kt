@@ -1,6 +1,7 @@
 package com.proservis.technician.domain.usecase
 
 import com.proservis.technician.data.work.WorkRepository
+import com.proservis.technician.domain.model.MeterReadingInput
 import javax.inject.Inject
 
 class CompleteMeterTaskUseCase @Inject constructor(
@@ -10,16 +11,14 @@ class CompleteMeterTaskUseCase @Inject constructor(
         tenantId: String,
         taskId: String,
         uid: String,
-        bwCounter: Int?,
-        colorCounter: Int?,
+        readings: List<MeterReadingInput>,
         note: String?,
     ) {
         workRepository.completeMeterTaskWithReading(
             tenantId = tenantId,
             taskId = taskId,
             uid = uid,
-            bwCounter = bwCounter,
-            colorCounter = colorCounter,
+            readings = readings,
             note = note,
         )
     }
