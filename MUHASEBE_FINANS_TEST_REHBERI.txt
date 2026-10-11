@@ -1,0 +1,165 @@
+================================================================================
+PROSERVIS - YENI NESIL MUHASEBE, FINANS & e-BELGE GELISTIRME VE TEST REHBERI
+Tarih: 11 Ekim 2026
+Durum: Teste Hazir (Yeni Entegratorler ve e-Belge Motoru Dahil Tum Gelistirmeler Tamamlandi)
+================================================================================
+
+Bu belge, ProServis sisteminde gerceklestirilen muhasebe, finans ve e-donusum
+gelistirmelerinin guncel durumunu, tamamlanan yeni ozellikleri, beklemeye alinan
+maddeleri ve adim adim test senaryolarini icerir.
+
+--------------------------------------------------------------------------------
+1. TAMAMLANAN ISLEMLER LISTESI (GUNCEL OZET)
+--------------------------------------------------------------------------------
+
+[X] 1. Taksit / Odeme Plani PDF Dokumu
+    - Odeme planlarini musterilere resmi A4 formatinda sunmak icin PDF motoru eklendi.
+    - Ilgili sayfa: http://localhost:3000/dashboard/finance/payment-plans
+
+[X] 2. Taksit Planinda Duzenleme & Sag Tik (Context Menu)
+    - Tablolardaki buton kalabaligini onlemek amaciyla sag tik menu entegre edildi.
+    - Vade oteleme, taksit tutari guncelleme ve taksit iptal aksiyonlari eklendi.
+
+[X] 3. Vade Farki Faturasi Entegrasyonu
+    - Geciken taksitler icin "Vade Farki Faturasi Kes" tiklandiginda veriler 
+      fatura olusturma ekranina otomatik aktarilacak sekilde baglandi.
+
+[X] 4. Gelismis Cek Portfoyu ve Takibi
+    - Musteri filtreleme/arama alani eklendi.
+    - Ayni musteriye ait farkli vadelerde seri/coklu cek girisi ozelligi saglandi.
+    - Cekin hangi bankaya verildigi ve durum makinesi (Portfoyde, Bankada, Tahsil Edildi, Karsiliksiz, Ciro) kuruldu.
+    - Ilgili sayfa: http://localhost:3000/dashboard/finance/cheques
+
+[X] 5. Banka Mutabakati (Bank Reconciliation)
+    - CSV ekstre aktarimi ve satir bazli tekillestirme motoru calisir hale getirildi.
+    - Agirlikli aday puanlama sistemi kuruldu (Tutar: +50, Fatura No: +35, Unvan: +25 puan).
+    - Ilgili sayfa: http://localhost:3000/dashboard/finance/bank-reconciliation
+
+[X] 6. Tevkifatli Fatura Kesme Modulu
+    - GIB standartlarindaki tum tevkifat kodlari (601..630) ve oranlari (2/10, 4/10, 5/10, 7/10, 9/10) eklendi.
+    - Matrah, Tevkif Edilen KDV ve Tahsil Edilecek KDV hesaplayicisi devreye alindi.
+    - Ilgili sayfa: http://localhost:3000/dashboard/invoices/create
+
+[X] 7. Fatura PDF Tevkifat ve Net Tutar Duzeltmesi
+    - PDF ciktisinda tevkif edilen KDV ve tahsil edilecek KDV ayrimi yapildi.
+    - Baslik "TEVKIFATLI FATURA" olarak guncellendi.
+    - Yazi ile odenecek net tutar (tevkifat dusulmus haliyle) Turkce metne cevrildi.
+
+[X] 8. e-Belge Yonetim Konsolu & UBL-TR 2.1 Motoru
+    - Fatura olusturma ekranina "Kaydet & e-Belge Gonder" butonu eklendi.
+    - Fatura goruntuleme modalina "Resmi XML Indir" ve "e-Belge Olarak Gonder" butonlari eklendi.
+    - Bagimsiz e-Belge Konsolu olusturuldu (VKN sorgulama, KPI kartlari, filtreler).
+    - Ilgili sayfa: http://localhost:3000/dashboard/e-documents
+
+[X] 9. Fatura Sablonu Gorsel Esitlemesi & Taslak/Resmi Durum Yonetimi
+    - Yeni begenilen e-Arsiv fatura tasarimi, yereldeki fatura goruntuleme pencerelerine uyarlandi.
+    - Firma logosu, QR kod ve mali alanlar korundu.
+    - Fatura henuz imzalanmadiysa filigranli "TASLAK RESMI FATURA", imzalandiysa "RESMI e-FATURA / e-ARSIV"
+      olarak dinamik basilmasi ve PDF ciktisi alinmasi saglandi.
+
+[X] 10. Modal Kapatma Butonu (X) Ust Uste Binme Onarimi
+    - Fatura goruntuleme, sevk irsaliyesi, personel bordro ve tum diyalog modallarinda
+      sag ustteki "X" kapatma butonu ile "Yazdir" butonunun ust uste binmesi sorunu tum
+      bilesenlerde (mr-8 / pr-10 ve flex yerlesimleri ile) tamamen cozuldu.
+
+[X] 11. GIB Test Portali Anlik Hesap Altyapisi (Genel Erisim)
+    - "Test Hesabi Doldur" ozelligi sisteme kayitli tum sirketlerde ve yeni acilacak 
+      tenant'larda gorunecek sekilde acildi. Ticari sifresi olmayan kullanicilar aninda 
+      ucretsiz GIB test ortamina baglanabiliyor.
+
+[X] 12. DIA ERP Cloud Entegratorunun Eklenmesi
+    - DiaIntegratorProvider.ts olusturuldu (REST/JSON API v2).
+    - Session login (sis/json), fatura ekleme (scf/json), VKN mukellefiyet kontrolu baglandi.
+    - Ayarlar ekranina Sunucu URL, Kullanici, Sifre, Firma Kodu, Donem Kodu ve Canli Test butonu eklendi.
+
+[X] 13. Akinsoft Wolvox ERP Entegratorunun Eklenmesi
+    - AkinsoftIntegratorProvider.ts olusturuldu.
+    - Wolvox Web Servis (Rest/SOAP) & UBL-TR 2.1 e-Donusum aktarim koprusu kuruldu.
+    - Ayarlar ekranina Web Servis URL, Kullanici, Sifre, Sirket Kodu, Calisma Yili ve Canli Test butonu eklendi.
+
+[X] 14. Varsayilan Entegrator Mimarisi (Kafa Karisikligini Onleme)
+    - 4 saglayici (QNB e-Finans, DIA ERP Cloud, Akinsoft Wolvox, GIB Portali) ayni ekranda sunuldu.
+    - Kullanicilarin kafasinin karismamasi icin sisteme tek bir "Varsayilan (Aktif)" saglayici mantigi kuruldu.
+    - Secili karta "✓ Varsayilan (Aktif)" rozeti, digerlerine "Pasif" rozeti verilerek netlestirildi.
+
+[X] 15. Entegrator Kurulum & Kullanim Rehberi (Modal & PDF / Yazdir)
+    - IntegratorGuideModal.tsx bileseni gelistirildi.
+    - Her entegratorun altina "Rehberi Incele / PDF Yazdir" butonu eklendi.
+    - DIA, Akinsoft, QNB ve GIB Portali icin adim adim yetkilendirme, port acma, test ve sik karsilasilan
+      hatalar kilavuzu tek tikla acilabilen ve A4 PDF olarak indirilebilen formata getirildi.
+
+
+--------------------------------------------------------------------------------
+2. DAHA SONRA DEVAM EDILECEK EKSIKLER / BEKLEYEN ISLEMLER
+--------------------------------------------------------------------------------
+
+[ ] 1. Gercek Canli QNB / DIA / Akinsoft Uretim Ortami Dogrulamasi
+    - Tum web servis entegrator kodlari production-ready yazildi ve test uclari calisiyor.
+    - Ancak musterinin fiili canli kullanici kodu, sifresi ve sabit IP/Port bilgileri 
+      sisteme girildiginde gercek uretim ortami uzerinde son teyit yapilacaktir.
+
+[ ] 2. Logo ERP Yerel Windows Servisi Kurulumu
+    - ProServis tarafidaki Transactional Outbox API hazirlandi (/api/integrations/outbox/poll).
+    - Logo sunucusunda arkaplanda calisacak olan Windows Servis / Logo Objects script'i 
+      ayri bir yerel masaustu kurulum adimi olarak gerceklestirilecektir.
+
+[ ] 3. Gelen e-Fatura / e-Arsiv Posta Kutusu (Inbound Inbox)
+    - Su anki faz "Giden Servis & Satis Faturalarinin" resmilestirilmesini ve ERP'lere aktarimini saglar.
+    - Tedarikcilerden kesilip gelen gelen faturalarin sisteme otomatik alinmasi sonraki faza aittir.
+
+[ ] 4. e-Irsaliye Gonderim Arayuzu
+    - Transfer irsaliyeleri olusturulabiliyor. Bunun UBL-TR e-Irsaliye formatinda QNB/GIB'e 
+      iletilmesi icin e-Irsaliye ozellestirme formu sonraki asamada zenginlestirilecek.
+
+
+--------------------------------------------------------------------------------
+3. ADIM ADIM TEST REHBERI
+--------------------------------------------------------------------------------
+
+TEST 1: GIB & ENTEGRATOR AYARLARI VE REHBER MODALI
+Adres: http://localhost:3000/dashboard/settings?tab=gib
+Adimlar:
+  1. Sayfada 4 entegrator kartini gorun: QNB, DIA Cloud, Akinsoft Wolvox, GIB Portal.
+  2. Secili kartta "✓ Varsayilan (Aktif)", digerlerinde "Pasif" yazdigini dogrulayin.
+  3. "DIA ERP Cloud" kartina tiklayin; formun DİA alanlarina donustugunu gorun.
+  4. Formun altindaki "Rehberi Incele / PDF Yazdir" butonuna basin; kurulum kilavuzunun acildigini ve 
+     sag ustteki "Yazdir / PDF Olarak Kaydet" butonu ile PDF ciktisi alabildiginizi test edin.
+  5. "GIB Portal (Ucretsiz)" kartini secip "Test Hesabi Doldur" butonuna basarak anlik test kullanicisi alin.
+  6. "GIB Portal Baglantisini Test Et" butonuna basarak basarili yaniti gorun.
+  7. "Tum e-Belge ve Entegrator Ayarlarini Kaydet" butonuna basarak kaydedin.
+
+TEST 2: e-BELGE YONETIM KONSOLU & RESMI FATURA SABLONU
+Adres: http://localhost:3000/dashboard/e-documents
+Adimlar:
+  1. VKN Sorgulama kutusuna 10 haneli VKN yazarak e-Fatura mukellefiyetini sorgulayin.
+  2. Tablodaki bir faturada "Incele" butonuna tiklayin; yenilenen modern resmi fatura gorunumunu inceleyin.
+  3. Sag ustteki "Yazdir" butonu ile kapatma "X" butonunun artik ust uste binmedigini teyit edin.
+  4. Fatura henuz imzalanmadiysa belgenin "TASLAK RESMI FATURA" olarak basildigini gorun.
+  5. "Resmi XML Indir" butonu ile UBL-TR 2.1 XML dosyasini indirin.
+
+TEST 3: TEVKIFATLI FATURA KESIMI & HESAPLAMALAR
+Adres: http://localhost:3000/dashboard/invoices/create
+Adimlar:
+  1. Musteri secip fatura kalemi girin.
+  2. Tevkifat Kodu (örn: 603 [7/10]) secerek KDV ve tahsil edilecek tutarin otomatik ayrildigini gorun.
+  3. Faturayi olusturun ve PDF ciktisinda tevkifat kalemlerinin ayrintili listelendigini kontrol edin.
+
+TEST 4: CEK PORTFOYU & TAKSIT PLANI SAG TIK
+Adres: http://localhost:3000/dashboard/finance/cheques ve /finance/payment-plans
+Adimlar:
+  1. Cekler sayfasinda tek musteriye birden fazla vadeli cek girisi yapin.
+  2. Taksit planlari sayfasinda satira sag tiklayarak PDF dokumu alin ve Vade Farki faturasi yonlendirmesini test edin.
+
+
+--------------------------------------------------------------------------------
+4. DERLEME VE SISTEM DURUMU
+--------------------------------------------------------------------------------
+TypeScript Kontrolu : npx tsc --noEmit -> HATA YOK (0 Error, Clean Build)
+DİA REST/JSON Motoru: Aktif (DiaIntegratorProvider)
+Akinsoft Wolvox     : Aktif (AkinsoftIntegratorProvider)
+QNB e-Finans SOAP   : Aktif (QnbIntegratorProvider)
+GIB e-Arsiv Portali : Aktif (GibPortalProvider)
+Outbox Servisi      : Aktif
+Rehber & PDF Modali : Aktif (IntegratorGuideModal)
+
+================================================================================
